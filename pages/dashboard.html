@@ -61,6 +61,14 @@
 </nav>
 <button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
 <script src="../js/sidebar.js"></script>
+<script>
+/* no painel a barra lateral começa recolhida — maximiza a área de dados */
+(function(){
+  var s=document.getElementById('sidebar');
+  if(s) s.classList.remove('open');
+  document.body.classList.remove('sidebar-open');
+})();
+</script>
 
 <header>
   <h1>Painel da Mecaniza&ccedil;&atilde;o &mdash; 2026</h1>
@@ -101,6 +109,10 @@
     <button class="aba" data-aba="beneficiario" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
       Benefici&aacute;rio
+    </button>
+    <button class="aba" data-aba="relatorio" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><rect x="8" y="13" width="2" height="5" rx=".5" fill="currentColor" stroke="none"/><rect x="11" y="11" width="2" height="7" rx=".5" fill="currentColor" stroke="none"/><rect x="14" y="15" width="2" height="3" rx=".5" fill="currentColor" stroke="none"/></svg>
+      Relat&oacute;rio
     </button>
     <button class="aba" data-aba="registros" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -150,6 +162,8 @@
     </div>
     <p class="filtro-resumo" id="resumo"></p>
   </section>
+
+  <div class="conteudo-abas">
 
   <!-- ==================================================== ABA: VISÃO GERAL -->
   <div class="aba-conteudo" data-aba="geral">
@@ -410,6 +424,7 @@
 
   <!-- =============================================== ABA: ESCRITÓRIO LOCAL -->
   <div class="aba-conteudo" data-aba="escritorio">
+    <section class="kpis" id="kpisEsc" aria-label="Indicadores por escrit&oacute;rio local"></section>
     <div class="painel-grid">
       <section class="painel">
         <div class="painel-cab"><div class="painel-cab-tit">
@@ -450,13 +465,16 @@
 
   <!-- =================================================== ABA: BENEFICIÁRIO -->
   <div class="aba-conteudo" data-aba="beneficiario">
+    <section class="kpis" id="kpisBen" aria-label="Indicadores dos benefici&aacute;rios"></section>
     <div class="painel-grid">
       <section class="painel largo">
         <div class="painel-cab"><div class="painel-cab-tit">
           <h2>Ficha do produtor</h2>
           <p class="sub">Selecione um produtor para ver o hist&oacute;rico dele na sele&ccedil;&atilde;o atual.</p>
         </div></div>
-        <div class="tabela-cab">
+        <div class="tabela-cab prod-cab">
+          <input type="search" class="busca" id="buscaProd" autocomplete="off"
+                 placeholder="Digite o nome do produtor&hellip;" aria-label="Buscar produtor">
           <select class="busca" id="selProd" aria-label="Produtor"></select>
         </div>
         <div id="fichaProd"></div>
@@ -494,6 +512,7 @@
 
   <!-- ====================================================== ABA: REGISTROS -->
   <div class="aba-conteudo" data-aba="registros">
+    <section class="kpis" id="kpisReg" aria-label="Indicadores dos registros"></section>
     <div class="painel-grid">
       <section class="painel largo">
         <div class="painel-cab"><div class="painel-cab-tit">
@@ -532,6 +551,25 @@
       </section>
     </div>
     <p class="nota" id="nota"></p>
+  </div>
+
+  <!-- ======================================================== ABA: RELATÓRIO -->
+  <div class="aba-conteudo" data-aba="relatorio">
+    <div class="relatorio-cab">
+      <input type="search" class="busca" id="relatorBusca" placeholder="Buscar munic&iacute;pio&hellip;" aria-label="Buscar munic&iacute;pio">
+      <div class="relatorio-vis" id="relatorioVis" role="group" aria-label="Modo de visualiza&ccedil;&atilde;o">
+        <button type="button" class="ativa" data-vis="quadros" aria-label="Ver em quadrados">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Quadrados
+        </button>
+        <button type="button" data-vis="lista" aria-label="Ver em lista">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Lista
+        </button>
+      </div>
+    </div>
+    <div class="relatorio-grid" id="relatorioGrid"></div>
+    <section class="kpis" id="kpisRel" aria-label="Indicadores do relat&oacute;rio"></section>
   </div>
 
   <!-- ======================================== ABA: ATUALIZAR DADOS (admin) -->
@@ -589,6 +627,8 @@
     </div>
   </div>
 
+  </div><!-- /conteudo-abas -->
+
 </div>
 
 <footer>Secretaria de Estado de Agricultura &ndash; SEAGRI / Acre &middot; P&aacute;gina de apoio interno</footer>
@@ -603,6 +643,19 @@
       <button class="btn btn-verde" id="admOk" type="button">Entrar</button>
       <button class="btn" id="admCancelar" type="button">Cancelar</button>
     </div>
+  </div>
+</div>
+
+<div class="relatorio-overlay" id="relatorioOverlay">
+  <div class="relatorio-modal">
+    <div class="relatorio-modal-cab">
+      <h2 id="relatorioTitulo"></h2>
+      <div class="relatorio-modal-acoes">
+        <button class="btn btn-verde" id="btnRelatorioPdf" type="button">Exportar PDF</button>
+        <button class="btn" id="btnRelatorioFechar" type="button">Fechar &times;</button>
+      </div>
+    </div>
+    <div class="relatorio-modal-body" id="relatorioConteudo"></div>
   </div>
 </div>
 

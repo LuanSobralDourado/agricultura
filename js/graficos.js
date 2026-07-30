@@ -230,25 +230,41 @@
           var h = (v / t) * ph;
           var bx = ml + larg * i + (larg - gr) / 2 + si * (bw + 2);
           if (h > 0) {
+            var tit = esc(rotulos[i]) + ' — ' + esc(s.nome) + ': ' + num(v, opts.dec);
+            if (s.detalhe && s.detalhe.valores[i]) {
+              tit += ' · ' + num(s.detalhe.valores[i], s.detalhe.dec) + ' ' + esc(s.detalhe.un);
+            }
             g += '<rect x="' + bx.toFixed(1) + '" y="' + (mt + ph - h).toFixed(1) + '" width="' + bw.toFixed(1) +
-              '" height="' + h.toFixed(1) + '" rx="3" fill="' + cor(s, si) + '"><title>' + esc(rotulos[i]) +
-              ' — ' + esc(s.nome) + ': ' + num(v, opts.dec) + '</title></rect>';
+              '" height="' + h.toFixed(1) + '" rx="3" fill="' + cor(s, si) + '"><title>' + tit + '</title></rect>';
           }
         });
       });
     } else {
+      // período sem valor (null/0) é buraco na linha: a série quebra em
+      // segmentos em vez de despencar até o zero, que não significaria nada
       series.forEach(function (s, si) {
         var c = cor(s, si);
-        var linha = s.valores.map(function (v, i) {
-          return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1);
-        }).join(' ');
-        if (modo === 'area') {
-          g += '<path d="' + linha + ' L' + x(n - 1).toFixed(1) + ' ' + (mt + ph) + ' L' + x(0).toFixed(1) +
-            ' ' + (mt + ph) + ' Z" fill="' + c + '" opacity=".16"/>';
-        }
-        g += '<path class="g-linha" d="' + linha + '" stroke="' + c + '"/>';
+        var trechos = [], atual = [];
+        s.valores.forEach(function (v, i) {
+          if (v == null || v === 0) { if (atual.length) { trechos.push(atual); atual = []; } return; }
+          atual.push(i);
+        });
+        if (atual.length) trechos.push(atual);
+
+        trechos.forEach(function (idx) {
+          var linha = idx.map(function (i, k) {
+            return (k ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(s.valores[i]).toFixed(1);
+          }).join(' ');
+          if (modo === 'area' && idx.length > 1) {
+            g += '<path d="' + linha + ' L' + x(idx[idx.length - 1]).toFixed(1) + ' ' + (mt + ph) +
+              ' L' + x(idx[0]).toFixed(1) + ' ' + (mt + ph) + ' Z" fill="' + c + '" opacity=".16"/>';
+          }
+          if (idx.length > 1) g += '<path class="g-linha" d="' + linha + '" stroke="' + c + '"/>';
+        });
+
         if (n <= 24) {
           s.valores.forEach(function (v, i) {
+            if (v == null || v === 0) return;
             g += '<circle class="g-ponto" cx="' + x(i).toFixed(1) + '" cy="' + y(v).toFixed(1) +
               '" r="4" fill="' + c + '"/>';
           });
@@ -264,10 +280,14 @@
     });
 
     var leg = '';
-    if (series.length > 1) {
+    var temDetalhe = series.some(function (s) { return s.detalhe && s.detalhe.total != null; });
+    if (series.length > 1 || temDetalhe) {
       leg = '<div class="legenda">' + series.map(function (s, i) {
+        var det = (s.detalhe && s.detalhe.total != null)
+          ? '<span class="legenda-det">' + num(s.detalhe.total, s.detalhe.dec) + ' ' + esc(s.detalhe.un) + '</span>'
+          : '';
         return '<span class="legenda-item"><span class="legenda-cor" style="background:' + cor(s, i) +
-          '"></span>' + esc(s.nome) + '</span>';
+          '"></span>' + esc(s.nome) + det + '</span>';
       }).join('') + '</div>';
     }
 
@@ -286,8 +306,14 @@
         cursor.style.visibility = 'visible';
         var h = '<div class="tooltip-tit">' + esc(rotulos[i]) + '</div>';
         series.forEach(function (s, si) {
+          if (s.valores[i] == null || s.valores[i] === 0) return; // sem lançamento no mês
           h += '<div class="tooltip-l"><span class="legenda-cor" style="background:' + cor(s, si) +
             '"></span>' + esc(s.nome) + '<b>' + num(s.valores[i], opts.dec) + '</b></div>';
+          // medida própria do serviço (hectares na mecanização, horas na açudagem)
+          if (s.detalhe && s.detalhe.valores[i]) {
+            h += '<div class="tooltip-l tooltip-sub">' + esc(s.detalhe.rot) +
+              '<b>' + num(s.detalhe.valores[i], s.detalhe.dec) + ' ' + esc(s.detalhe.un) + '</b></div>';
+          }
         });
         tip.innerHTML = h;
         tip.classList.add('on');
@@ -311,14 +337,17 @@
   function tabelaSerie(el, rotulos, series, opts) {
     opts = opts || {};
     if (!rotulos || !rotulos.length) return vazio(el);
-    var tot = series.map(function (s) { return s.valores.reduce(function (a, v) { return a + v; }, 0); });
+    var tot = series.map(function (s) { return s.valores.reduce(function (a, v) { return a + (v || 0); }, 0); });
+    var cel = function (v) {
+      return '<td class="num">' + (v ? num(v, opts.dec) : '<span class="nada">—</span>') + '</td>';
+    };
     el.innerHTML = '<div class="tabela-scroll"><table class="dados"><thead><tr><th>Período</th>' +
       series.map(function (s) { return '<th>' + esc(s.nome) + '</th>'; }).join('') +
       (series.length > 1 ? '<th>Total</th>' : '') + '</tr></thead><tbody>' +
       rotulos.map(function (r, i) {
-        var soma = series.reduce(function (a, s) { return a + s.valores[i]; }, 0);
+        var soma = series.reduce(function (a, s) { return a + (s.valores[i] || 0); }, 0);
         return '<tr data-rot="' + esc(r) + '"><td class="forte">' + esc(r) + '</td>' +
-          series.map(function (s) { return '<td class="num">' + num(s.valores[i], opts.dec) + '</td>'; }).join('') +
+          series.map(function (s) { return cel(s.valores[i]); }).join('') +
           (series.length > 1 ? '<td class="num forte">' + num(soma, opts.dec) + '</td>' : '') + '</tr>';
       }).join('') +
       '<tr><td class="forte">Total</td>' +

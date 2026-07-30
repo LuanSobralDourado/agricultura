@@ -320,9 +320,13 @@
   }
 
   /* ------------------------------------------------------------- stat tiles */
+  // itens com { _sec: 'Título' } viram cabeçalhos de seção (grid-column:1/-1).
   function tiles(alvo, itens) {
     if (!el(alvo)) return;
     el(alvo).innerHTML = itens.map(function (i) {
+      if (i._sec) {
+        return '<div class="kpis-sec"><span>' + G.esc(i._sec) + '</span></div>';
+      }
       var tag = i.ir ? 'button' : 'div';
       return '<' + tag + ' class="kpi ' + (i.cls || '') + '"' +
         (i.ir ? ' type="button" data-ir="' + i.ir + '" title="Ver detalhes"' : '') + '>' +
@@ -350,16 +354,33 @@
       return;
     }
     var rot = ks.map(mesRot);
+    // mês sem valor vira null (buraco no gráfico), nunca zero: um mês em que
+    // um dos serviços não teve lançamento não deve aparecer como coluna/ponto 0
+    var vals = function (m) { return ks.map(function (k) { return m.get(k) || null; }); };
     var series;
     if (nomeUnico) {
       var m = somarPor(D, function (r) { return r.d.slice(0, 7); }, valor);
-      series = [{ nome: nomeUnico, slot: nomeUnico === ACU ? 1 : 0, valores: ks.map(function (k) { return m.get(k) || 0; }) }];
+      series = [{ nome: nomeUnico, slot: nomeUnico === ACU ? 1 : 0, valores: vals(m) }];
     } else {
-      var mMec = somarPor(D.filter(function (r) { return r.pc === MEC; }), function (r) { return r.d.slice(0, 7); }, valor);
-      var mAcu = somarPor(D.filter(function (r) { return r.pc === ACU; }), function (r) { return r.d.slice(0, 7); }, valor);
+      // gráfico com as duas séries (ex.: "atendimentos por mês")
+      // — mecanização leva o total de ha como detalhe, açudagem leva as horas
+      var Dmec = D.filter(function (r) { return r.pc === MEC; });
+      var Dacu = D.filter(function (r) { return r.pc === ACU; });
+      var mMec = somarPor(Dmec, function (r) { return r.d.slice(0, 7); }, valor);
+      var mAcu = somarPor(Dacu, function (r) { return r.d.slice(0, 7); }, valor);
+      var dMecHa  = somarPor(Dmec, function (r) { return r.d.slice(0, 7); }, function (r) { return r.ha; });
+      var dAcuHrs = somarPor(Dacu, function (r) { return r.d.slice(0, 7); }, function (r) { return r.hrs; });
+      var totHa  = soma(Dmec, function (r) { return r.ha; });
+      var totHrs = soma(Dacu, function (r) { return r.hrs; });
       series = [];
-      if (!F.pc || F.pc === MEC) series.push({ nome: MEC, slot: 0, valores: ks.map(function (k) { return mMec.get(k) || 0; }) });
-      if (!F.pc || F.pc === ACU) series.push({ nome: ACU, slot: 1, valores: ks.map(function (k) { return mAcu.get(k) || 0; }) });
+      if (!F.pc || F.pc === MEC) series.push({
+        nome: MEC, slot: 0, valores: vals(mMec),
+        detalhe: { rot: 'Área mecanizada', valores: vals(dMecHa), dec: 1, un: 'ha', total: totHa }
+      });
+      if (!F.pc || F.pc === ACU) series.push({
+        nome: ACU, slot: 1, valores: vals(mAcu),
+        detalhe: { rot: 'Horas de máquina', valores: vals(dAcuHrs), dec: 1, un: 'h', total: totHrs }
+      });
     }
     pintarSerie(id, rot, series);
   }
@@ -437,58 +458,168 @@
   }
 
   /* ------------------------------------------------------ ficha do produtor */
+  var NOMES_PROD = [];
+
+  /** Remove acentos e caixa para a busca casar "joao" com "João". */
+  function chaveBusca(s) {
+    return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+
   function montarSelProd(D) {
-    var nomes = Array.from(new Set(D.map(function (r) { return r.prod; }).filter(Boolean)))
+    NOMES_PROD = Array.from(new Set(D.map(function (r) { return r.prod; }).filter(Boolean)))
       .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
     var atual = el('selProd').value;
-    el('selProd').innerHTML = '<option value="">Selecione um produtor (' + G.num(nomes.length) + ' na seleção)</option>' +
-      nomes.map(function (n) { return '<option value="' + G.esc(n) + '">' + G.esc(n) + '</option>'; }).join('');
-    if (nomes.indexOf(atual) >= 0) el('selProd').value = atual;
+    filtrarSelProd(atual);
+    if (NOMES_PROD.indexOf(atual) < 0) el('selProd').value = '';
     ficha(D);
+  }
+
+  /** Reconstrói a lista com os nomes que casam com o texto digitado, mantendo
+      a seleção atual quando ela ainda estiver entre os resultados. */
+  function filtrarSelProd(manter) {
+    var q = chaveBusca(el('buscaProd') ? el('buscaProd').value.trim() : '');
+    var lista = !q ? NOMES_PROD : NOMES_PROD.filter(function (n) {
+      return chaveBusca(n).indexOf(q) >= 0;
+    });
+    var rot = !lista.length ? 'Nenhum produtor encontrado'
+      : q ? G.num(lista.length) + ' de ' + G.num(NOMES_PROD.length) + ' produtores'
+          : 'Selecione um produtor (' + G.num(NOMES_PROD.length) + ' na seleção)';
+    el('selProd').innerHTML = '<option value="">' + G.esc(rot) + '</option>' +
+      lista.map(function (n) { return '<option value="' + G.esc(n) + '">' + G.esc(n) + '</option>'; }).join('');
+    el('selProd').disabled = !lista.length;
+    if (manter && lista.indexOf(manter) >= 0) el('selProd').value = manter;
+    // um único resultado: já seleciona, poupa o clique
+    else if (q && lista.length === 1) el('selProd').value = lista[0];
+    return lista;
+  }
+
+  /* ------------------------------------------------ ficha completa do produtor */
+  var benGeral = [];   // preenchido em render(); usado quando nenhum produtor está selecionado
+
+  function benVazio() {
+    /* Enquanto sem seleção mostra os indicadores gerais da aba */
+    tiles('kpisBen', benGeral.length ? benGeral : [
+      { rot: 'Aguardando dados…', val: '—', sub: '' }
+    ]);
+    el('fichaProd').innerHTML =
+      '<p class="vazio" style="margin-top:24px">' +
+      (el('selProd').disabled
+        ? 'Nenhum produtor encontrado com esse nome.'
+        : 'Digite ou escolha um produtor acima para ver a ficha completa.') +
+      '</p>';
   }
 
   function ficha(D) {
     var nome = el('selProd').value;
-    if (!nome) return G.vazio(el('fichaProd'), 'Escolha um produtor na lista acima.');
-    var R = D.filter(function (r) { return r.prod === nome; });
-    if (!R.length) return G.vazio(el('fichaProd'), 'Sem atendimentos para este produtor na seleção atual.');
-    var culturas = [];
-    R.forEach(function (r) { r.cult.forEach(function (c) { culturas.push(c[0] + ' (' + G.num(c[1], 1) + ' ha)'); }); });
-    var maq = Array.from(new Set([].concat.apply([], R.map(function (r) { return r.maq; }))));
-    var uni = function (f) { return Array.from(new Set(R.map(f))).filter(Boolean).join(', '); };
+    if (!nome) return benVazio();
 
-    var itens = [
-      ['Produtor', G.esc(nome)],
-      ['Município', G.esc(uni(function (r) { return r.mun; }))],
-      ['Escritório local', G.esc(uni(function (r) { return r.esc; }))],
-      ['Propriedade', G.esc(uni(function (r) { return r.propr; }))],
-      ['Associação', G.esc(uni(function (r) { return r.assoc; }))],
-      ['DAP', G.esc(uni(function (r) { return r.dap; }))],
-      ['Atendimentos', G.num(R.length)],
-      ['Hectares mecanizados', G.num(soma(R, function (r) { return r.ha; }), 1) + ' ha'],
-      ['Horas de máquina', G.num(soma(R, function (r) { return r.hrs; }), 1) + ' h'],
-      ['Tanques / açudes', G.num(soma(R, function (r) { return r.ac; }))],
-      ['DAE', moeda(soma(R, function (r) { return r.dae; }))],
-      ['Culturas', culturas.length ? G.esc(culturas.join(' · ')) : '—'],
-      ['Máquinas', maq.length ? G.esc(maq.join(', ')) : '—']
+    var R = D.filter(function (r) { return r.prod === nome; });
+    if (!R.length) return benVazio();
+
+    var mec = R.filter(function (r) { return r.pc === MEC; });
+    var acu = R.filter(function (r) { return r.pc === ACU; });
+    var haP  = soma(mec, function (r) { return r.ha; });
+    var hrsP = soma(acu, function (r) { return r.hrs; });
+    var acP  = soma(acu, function (r) { return r.ac; });
+    var daeP = soma(R,   function (r) { return r.dae; });
+
+    var uni = function (f) { return Array.from(new Set(R.map(f))).filter(Boolean).join(', '); };
+    var uniV = function (f) {
+      var vs = Array.from(new Set(R.map(f))).filter(function (v) { return v && v !== NI; });
+      return vs.length ? G.esc(vs.join(', ')) : '—';
+    };
+
+    /* KPIs do produtor selecionado */
+    var areaCultP = new Map();
+    mec.forEach(function (r) {
+      r.cult.forEach(function (c) { areaCultP.set(c[0], (areaCultP.get(c[0]) || 0) + c[1]); });
+    });
+    var maqP  = Array.from(new Set([].concat.apply([], R.map(function (r) { return r.maq; }))));
+    var implP = Array.from(new Set([].concat.apply([], R.map(function (r) { return r.impl; }))));
+    var cultP = ranking(areaCultP, 30);
+
+    tiles('kpisBen', [
+      { _sec: nome },
+      { rot: 'Atendimentos', val: G.num(R.length), sub: G.num(mec.length) + ' mecaniz. + ' + G.num(acu.length) + ' açudagem' },
+      { rot: 'Hectares mecanizados', val: G.num(haP, 1), un: 'ha', cls: 'mec',
+        sub: mec.length ? 'média ' + G.num(haP / mec.length, 1) + ' ha/atend.' : '—' },
+      { rot: 'Horas de máquina', val: G.num(hrsP, 1), un: 'h', cls: 'acu',
+        sub: acu.length ? 'média ' + G.num(hrsP / acu.length, 1) + ' h/atend.' : '—' },
+      { rot: 'Tanques / açudes', val: G.num(acP), cls: 'acu',
+        sub: 'construídos ou reformados' },
+      { rot: 'DAE arrecadada', val: moeda(daeP), cls: 'texto',
+        sub: G.num(R.filter(function (r) { return r.dae > 0; }).length) + ' registros com DAE' },
+      { rot: 'Período', val: G.num(new Set(R.map(function (r) { return r.d.slice(0, 7); })).size),
+        sub: 'meses com lançamento' }
+    ]);
+
+    /* Dados cadastrais */
+    var ficha_itens = [
+      ['Produtor',          G.esc(nome)],
+      ['Município',         uniV(function (r) { return r.mun; })],
+      ['Escritório local',  uniV(function (r) { return r.esc; })],
+      ['Propriedade',       uniV(function (r) { return r.propr; })],
+      ['Endereço / local',  uniV(function (r) { return r.loc; })],
+      ['Sexo',              uniV(function (r) { return r.sexo; })],
+      ['Estado civil',      uniV(function (r) { return r.ec; })],
+      ['Associação / coop.',uniV(function (r) { return r.assoc; })],
+      ['DAP',               uniV(function (r) { return r.dap; })],
+      ['Técnico(s)',        uniV(function (r) { return r.rt; })]
     ];
 
-    el('fichaProd').innerHTML = '<div class="ficha">' + itens.map(function (i) {
-      return '<div class="ficha-item"><div class="ficha-rot">' + i[0] + '</div><div class="ficha-val">' +
-        (i[1] || '—') + '</div></div>';
-    }).join('') + '</div>' +
-      '<div class="tabela-scroll"><table class="dados"><thead><tr><th>Inserção</th><th>Vistoria</th><th>Serviço</th>' +
-      '<th>Culturas</th><th>Hectares</th><th>Horas</th><th>Tanques</th><th>Técnico</th><th>Formulário</th>' +
-      '</tr></thead><tbody>' + R.map(function (r) {
-        return '<tr><td class="num">' + dataBR(r.d) + '</td><td class="num">' + dataBR(r.dv) + '</td>' +
+    var secFicha = '<h3 class="ben-sec">Dados cadastrais</h3>' +
+      '<div class="ficha">' + ficha_itens.map(function (i) {
+        return '<div class="ficha-item"><div class="ficha-rot">' + G.esc(i[0]) +
+          '</div><div class="ficha-val">' + (i[1] || '—') + '</div></div>';
+      }).join('') + '</div>';
+
+    /* Culturas */
+    var secCult = '';
+    if (cultP.length) {
+      secCult = '<h3 class="ben-sec">Culturas mecanizadas</h3>' +
+        '<div class="ficha">' + cultP.map(function (c) {
+          return '<div class="ficha-item"><div class="ficha-rot">' + G.esc(c.rot) +
+            '</div><div class="ficha-val">' + G.num(c.val, 1) + '<span class="kpi-un"> ha</span></div></div>';
+        }).join('') + '</div>';
+    }
+
+    /* Máquinas e implementos */
+    var secMaq = (maqP.length || implP.length) ?
+      '<h3 class="ben-sec">Equipamentos utilizados</h3>' +
+      '<div class="ficha">' +
+      maqP.map(function (m) {
+        return '<div class="ficha-item"><div class="ficha-rot">Máquina</div><div class="ficha-val">' + G.esc(m) + '</div></div>';
+      }).join('') +
+      implP.map(function (i) {
+        return '<div class="ficha-item"><div class="ficha-rot">Implemento</div><div class="ficha-val">' + G.esc(i) + '</div></div>';
+      }).join('') +
+      '</div>' : '';
+
+    /* Tabela de registros */
+    var secTabela = '<h3 class="ben-sec">Histórico de atendimentos (' + G.num(R.length) + ')</h3>' +
+      '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
+      '<th>Inserção</th><th>Vistoria</th><th>Serviço</th><th>Município</th>' +
+      '<th>Culturas / área</th><th>Hectares</th><th>Horas</th><th>Tanques</th>' +
+      '<th>Técnico</th><th>Obs.</th><th>Form.</th>' +
+      '</tr></thead><tbody>' +
+      R.map(function (r) {
+        return '<tr>' +
+          '<td class="num">' + dataBR(r.d) + '</td>' +
+          '<td class="num">' + dataBR(r.dv) + '</td>' +
           '<td><span class="tag ' + (r.pc === MEC ? 'tag-mec' : 'tag-acu') + '">' + G.esc(r.pc) + '</span></td>' +
-          '<td>' + (r.cult.length ? r.cult.map(function (c) { return G.esc(c[0]); }).join(', ') : '—') + '</td>' +
-          '<td class="num">' + (r.ha ? G.num(r.ha, 1) : '—') + '</td>' +
+          '<td>' + G.esc(r.mun || '—') + '</td>' +
+          '<td>' + (r.cult.length ? r.cult.map(function (c) { return G.esc(c[0]) + ' (' + G.num(c[1], 1) + ' ha)'; }).join(', ') : '—') + '</td>' +
+          '<td class="num">' + (r.ha  ? G.num(r.ha,  1) : '—') + '</td>' +
           '<td class="num">' + (r.hrs ? G.num(r.hrs, 1) : '—') + '</td>' +
-          '<td class="num">' + (r.ac ? G.num(r.ac) : '—') + '</td>' +
-          '<td>' + G.esc(r.rt) + '</td>' +
-          '<td>' + (r.form ? '<a href="' + G.esc(r.form) + '" target="_blank" rel="noopener">abrir</a>' : '—') + '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+          '<td class="num">' + (r.ac  ? G.num(r.ac)    : '—') + '</td>' +
+          '<td>' + G.esc(r.rt || '—') + '</td>' +
+          '<td class="fraco">' + G.esc(r.obs || '—') + '</td>' +
+          '<td>' + (r.form ? '<a href="' + G.esc(r.form) + '" target="_blank" rel="noopener">abrir</a>' : '—') + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+
+    el('fichaProd').innerHTML = secFicha + secCult + secMaq + secTabela;
   }
 
   /* -------------------------------------------------------------- renderizar */
@@ -518,23 +649,105 @@
       (D.length ? ' &middot; inseridos de ' + dataBR(D[0].d) + ' a ' + dataBR(D[D.length - 1].d) : '');
 
     // ------------------------------------------- visão geral: contadores
+    // 4 seções de 6 (grid CSS = 6 colunas). Cada { _sec } vira um cabeçalho
+    // de linha que ocupa toda a largura do grid.
+    var nMulher = D.filter(function (r) { return r.sexo === 'Feminino'; }).length;
+    var topMun    = ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 1)[0];
+    var topMunHrs = ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.hrs; }), 1)[0];
+    var topCult   = ranking(areaCult, 1)[0];
+    var nEsc  = new Set(D.map(function (r) { return r.esc; })).size;
+    var nTec  = new Set(D.map(function (r) { return r.rt; })).size;
+    var nAssoc = new Set(D.map(function (r) { return r.assoc; }).filter(function (a) { return a && a !== NI; })).size;
+    var nMeses = new Set(D.map(function (r) { return r.d.slice(0, 7); })).size;
+    var dae   = soma(D, function (r) { return r.dae; });
+    // Produtores: pares únicos (nome + propriedade) — definição alinhada ao campo "produtor+imóvel"
+    var nProd = new Set(D.map(function (r) { return (r.prod || '') + '|' + (r.propr || ''); })
+      .filter(function (k) { return k !== '|'; })).size;
+    var nMun  = new Set(D.map(function (r) { return r.mun; })).size;
+
+    /* Extras usados pelos contadores das outras abas — todas as abas abrem com
+       uma seção de contadores agrupada, igual à visão geral. */
+    var nComDae  = D.filter(function (r) { return r.dae > 0; }).length;
+    var nComForm = D.filter(function (r) { return r.form; }).length;
+    var nComCult = D.filter(function (r) { return r.cult.length; }).length;
+    var topMunAc    = ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.ac; }), 1)[0];
+    var topMunAt    = ranking(contar(D, function (r) { return r.mun; }), 1)[0];
+    var topEscAt    = ranking(contar(D, function (r) { return r.esc; }), 1)[0];
+    var topEscHa    = ranking(somarPor(mec, function (r) { return r.esc; }, function (r) { return r.ha; }), 1)[0];
+    var topEscHrs   = ranking(somarPor(acu, function (r) { return r.esc; }, function (r) { return r.hrs; }), 1)[0];
+    var topTec      = ranking(contar(D, function (r) { return r.rt; }), 1)[0];
+    var topMaq      = ranking(contar(mec, function (r) { return r.maq; }), 1)[0];
+    var topSis      = ranking(sis, 1)[0];
+    var topCultQtd  = ranking(qtdCult, 1)[0];
+    var maxHa   = mec.reduce(function (a, r) { return Math.max(a, r.ha); }, 0);
+    var maxHrs  = acu.reduce(function (a, r) { return Math.max(a, r.hrs); }, 0);
+    var maxAc   = acu.reduce(function (a, r) { return Math.max(a, r.ac); }, 0);
+    var nSexoF  = nMulher;
+    var nSexoM  = D.filter(function (r) { return r.sexo === 'Masculino'; }).length;
+    var nDapSim = D.filter(function (r) { return r.dap === 'Sim'; }).length;
+    var nDapNao = D.filter(function (r) { return r.dap === 'Não' || r.dap === 'Vencida'; }).length;
+    var pct = function (n, t) { return t ? (n / t * 100).toFixed(1).replace('.', ',') + '%' : '—'; };
+
     tiles('kpis', [
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'campo Total mecanizado' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'serviços de açudagem' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'construídos ou reformados' },
-      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
-      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao', sub: G.num(produtores(mec)) + ' produtores' },
-      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem', sub: G.num(produtores(acu)) + ' produtores' },
-      { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
-      { rot: 'Municípios atendidos', val: G.num(new Set(D.map(function (r) { return r.mun; })).size), ir: 'municipio', sub: 'com pelo menos 1 atendimento' },
-      { rot: 'Escritórios locais', val: G.num(new Set(D.map(function (r) { return r.esc; })).size), ir: 'escritorio', sub: G.num(new Set(D.map(function (r) { return r.rt; })).size) + ' técnicos atuando' },
-      { rot: 'Área das culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura', sub: G.num(areaCult.size) + ' culturas diferentes' },
-      { rot: 'Culturas declaradas', val: G.num(nCult), cls: 'mec', ir: 'cultura', sub: 'até 4 por atendimento' },
-      { rot: 'Média por atendimento', val: G.num(mec.length ? ha / mec.length : 0, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'hectares mecanizados' },
-      { rot: 'Horas por tanque', val: G.num(nAc ? hrs / nAc : 0, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'produtividade média' },
-      { rot: 'Mulheres atendidas', val: G.num(D.filter(function (r) { return r.sexo === 'Feminino'; }).length), ir: 'beneficiario', sub: D.length ? (D.filter(function (r) { return r.sexo === 'Feminino'; }).length / D.length * 100).toFixed(1).replace('.', ',') + '% dos atendimentos' : '' },
-      { rot: 'Produtores com DAP', val: G.num(D.filter(function (r) { return r.dap === 'Sim'; }).length), ir: 'beneficiario', sub: 'DAP declarada como válida' },
-      { rot: 'DAE arrecadada', val: moeda(soma(D, function (r) { return r.dae; })), ir: 'registros', sub: G.num(D.filter(function (r) { return r.dae > 0; }).length) + ' atendimentos com DAE' }
+      /* ── SEÇÃO 1: Resultados gerais ─────────────────────────────────── */
+      { _sec: 'Resultados gerais' },
+      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao',
+        sub: 'campo Total mecanizado' },
+      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem',
+        sub: 'serviços de açudagem' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem',
+        sub: 'construídos ou reformados' },
+      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros',
+        sub: 'vistorias registradas' },
+      { rot: 'Produtores atendidos', val: G.num(nProd), ir: 'beneficiario',
+        sub: 'pares produtor + imóvel distintos' },
+      { rot: 'Municípios atendidos', val: G.num(nMun), ir: 'municipio',
+        sub: 'com pelo menos 1 atendimento' },
+
+      /* ── SEÇÃO 2: Mecanização e açudagem ─────────────────────────── */
+      { _sec: 'Mecanização e açudagem' },
+      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao',
+        sub: G.num(ha, 1) + ' ha registrados' },
+      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem',
+        sub: G.num(hrs, 1) + ' h de máquina' },
+      { rot: 'Média por atendimento', val: G.num(mec.length ? ha / mec.length : 0, 1), un: 'ha', cls: 'mec',
+        ir: 'mecanizacao', sub: 'hectares mecanizados' },
+      { rot: 'Horas por tanque', val: G.num(nAc ? hrs / nAc : 0, 1), un: 'h', cls: 'acu',
+        ir: 'acudagem', sub: 'produtividade média' },
+      { rot: 'Maior área atendida', val: G.num(mec.reduce(function (a, r) { return Math.max(a, r.ha); }, 0), 1),
+        un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'em um único atendimento' },
+      { rot: 'Maior serviço de açudagem', val: G.num(acu.reduce(function (a, r) { return Math.max(a, r.hrs); }, 0), 1),
+        un: 'h', cls: 'acu', ir: 'acudagem', sub: 'em uma única vistoria' },
+
+      /* ── SEÇÃO 3: Culturas e território ──────────────────────────── */
+      { _sec: 'Culturas e território' },
+      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura',
+        sub: G.num(nCult) + ' declarações no total' },
+      { rot: 'Área das culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura',
+        sub: 'soma das áreas declaradas' },
+      { rot: 'Cultura com mais área', val: topCult ? G.esc(topCult.rot) : '—', cls: 'mec texto',
+        ir: 'cultura', sub: topCult ? G.num(topCult.val, 1) + ' ha declarados' : '' },
+      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto',
+        ir: 'municipio', sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Município com mais horas', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto',
+        ir: 'municipio', sub: topMunHrs ? G.num(topMunHrs.val, 1) + ' h de máquina' : '' },
+      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio',
+        sub: G.num(nTec) + ' técnicos atuando' },
+
+      /* ── SEÇÃO 4: Perfil dos beneficiários ───────────────────────── */
+      { _sec: 'Perfil dos beneficiários' },
+      { rot: 'Produtores CPF distintos', val: G.num(produtores(D)), ir: 'beneficiario',
+        sub: 'CPFs válidos na planilha' },
+      { rot: 'Mulheres atendidas', val: G.num(nMulher), ir: 'beneficiario',
+        sub: D.length ? (nMulher / D.length * 100).toFixed(1).replace('.', ',') + '% dos atendimentos' : '' },
+      { rot: 'Produtores com DAP', val: G.num(D.filter(function (r) { return r.dap === 'Sim'; }).length),
+        ir: 'beneficiario', sub: 'DAP declarada como válida' },
+      { rot: 'Associações e cooperativas', val: G.num(nAssoc), ir: 'beneficiario',
+        sub: 'organizações citadas' },
+      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', ir: 'registros',
+        sub: G.num(D.filter(function (r) { return r.dae > 0; }).length) + ' atendimentos com DAE' },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), ir: 'registros',
+        sub: 'em ' + (ANOS[0] || '2026') }
     ]);
 
     // ------------------------------------------- visão geral: gráficos
@@ -549,11 +762,36 @@
 
     // --------------------------------------------------------- mecanização
     tiles('kpisMec', [
+      { _sec: 'Resultados da mecanização' },
       { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', sub: 'campo Total mecanizado' },
-      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', sub: G.num(produtores(mec)) + ' produtores' },
+      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', sub: pct(mec.length, D.length) + ' dos atendimentos' },
+      { rot: 'Produtores atendidos', val: G.num(produtores(mec)), cls: 'mec', ir: 'beneficiario', sub: 'CPFs distintos' },
+      { rot: 'Municípios atendidos', val: G.num(new Set(mec.map(function (r) { return r.mun; })).size), cls: 'mec',
+        ir: 'municipio', sub: 'com mecanização' },
       { rot: 'Média por atendimento', val: G.num(mec.length ? ha / mec.length : 0, 1), un: 'ha', cls: 'mec', sub: 'hectares' },
-      { rot: 'Maior área atendida', val: G.num(mec.reduce(function (a, r) { return Math.max(a, r.ha); }, 0), 1), un: 'ha', cls: 'mec', sub: 'em um único atendimento' },
-      { rot: 'DAE arrecadada', val: moeda(soma(mec, function (r) { return r.dae; })), cls: 'mec', sub: G.num(mec.filter(function (r) { return r.dae > 0; }).length) + ' com DAE informada' }
+      { rot: 'Maior área atendida', val: G.num(maxHa, 1), un: 'ha', cls: 'mec', sub: 'em um único atendimento' },
+
+      { _sec: 'Culturas e áreas' },
+      { rot: 'Hectares em culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura', sub: 'soma das áreas declaradas' },
+      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(nCult) + ' declarações' },
+      { rot: 'Cultura com mais área', val: topCult ? G.esc(topCult.rot) : '—', cls: 'mec texto', ir: 'cultura',
+        sub: topCult ? G.num(topCult.val, 1) + ' ha declarados' : '' },
+      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
+        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Atendimentos com cultura', val: G.num(nComCult), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' },
+      { rot: 'Culturas por atendimento', val: G.num(nComCult ? nCult / nComCult : 0, 1), cls: 'mec', sub: 'média declarada' },
+
+      { _sec: 'Máquinas e arrecadação' },
+      { rot: 'Tipos de máquina', val: G.num(contar(mec, function (r) { return r.maq; }).size), cls: 'mec', sub: 'categorias identificadas' },
+      { rot: 'Máquina mais usada', val: topMaq ? G.esc(topMaq.rot) : '—', cls: 'mec texto',
+        sub: topMaq ? G.num(topMaq.val) + ' atendimentos' : '' },
+      { rot: 'Implementos e serviços', val: G.num(contar(mec, function (r) { return r.impl; }).size), cls: 'mec', sub: 'tipos identificados' },
+      { rot: 'DAE arrecadada', val: moeda(soma(mec, function (r) { return r.dae; })), cls: 'mec texto',
+        sub: G.num(mec.filter(function (r) { return r.dae > 0; }).length) + ' com DAE informada' },
+      { rot: 'Escritórios envolvidos', val: G.num(new Set(mec.map(function (r) { return r.esc; })).size), cls: 'mec',
+        ir: 'escritorio', sub: 'com mecanização' },
+      { rot: 'Meses com lançamento', val: G.num(new Set(mec.map(function (r) { return r.d.slice(0, 7); })).size), cls: 'mec',
+        ir: 'registros', sub: 'em ' + (ANOS[0] || '2026') }
     ]);
     serieDe('gSerieMec', mec, function (r) { return r.ha; }, MEC);
     pintarCat('gMecMun', ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 14));
@@ -567,11 +805,37 @@
 
     // ------------------------------------------------------------ açudagem
     tiles('kpisAcu', [
+      { _sec: 'Resultados da açudagem' },
       { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', sub: 'escavadeira hidráulica' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', sub: acu.length ? 'média de ' + G.num(nAc / acu.length, 1) + ' por vistoria' : '—' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', sub: 'construídos ou reformados' },
+      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', sub: pct(acu.length, D.length) + ' dos atendimentos' },
+      { rot: 'Produtores atendidos', val: G.num(produtores(acu)), cls: 'acu', ir: 'beneficiario', sub: 'CPFs distintos' },
+      { rot: 'Municípios atendidos', val: G.num(new Set(acu.map(function (r) { return r.mun; })).size), cls: 'acu',
+        ir: 'municipio', sub: 'com açudagem' },
+      { rot: 'Escritórios envolvidos', val: G.num(new Set(acu.map(function (r) { return r.esc; })).size), cls: 'acu',
+        ir: 'escritorio', sub: 'com açudagem' },
+
+      { _sec: 'Produtividade' },
       { rot: 'Horas por tanque', val: G.num(nAc ? hrs / nAc : 0, 1), un: 'h', cls: 'acu', sub: 'produtividade média' },
-      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', sub: G.num(produtores(acu)) + ' produtores' },
-      { rot: 'Maior serviço', val: G.num(acu.reduce(function (a, r) { return Math.max(a, r.hrs); }, 0), 1), un: 'h', cls: 'acu', sub: 'em uma única vistoria' }
+      { rot: 'Horas por vistoria', val: G.num(acu.length ? hrs / acu.length : 0, 1), un: 'h', cls: 'acu', sub: 'média por atendimento' },
+      { rot: 'Tanques por vistoria', val: G.num(acu.length ? nAc / acu.length : 0, 1), cls: 'acu', sub: 'média por atendimento' },
+      { rot: 'Maior serviço', val: G.num(maxHrs, 1), un: 'h', cls: 'acu', sub: 'em uma única vistoria' },
+      { rot: 'Mais tanques numa vistoria', val: G.num(maxAc), cls: 'acu', sub: 'num único atendimento' },
+      { rot: 'Meses com lançamento', val: G.num(new Set(acu.map(function (r) { return r.d.slice(0, 7); })).size), cls: 'acu',
+        ir: 'registros', sub: 'em ' + (ANOS[0] || '2026') },
+
+      { _sec: 'Território e arrecadação' },
+      { rot: 'Município com mais horas', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto', ir: 'municipio',
+        sub: topMunHrs ? G.num(topMunHrs.val, 1) + ' h de máquina' : '' },
+      { rot: 'Município com mais tanques', val: topMunAc ? G.esc(topMunAc.rot) : '—', cls: 'acu texto', ir: 'municipio',
+        sub: topMunAc ? G.num(topMunAc.val) + ' tanques' : '' },
+      { rot: 'Escritório com mais horas', val: topEscHrs ? G.esc(topEscHrs.rot) : '—', cls: 'acu texto', ir: 'escritorio',
+        sub: topEscHrs ? G.num(topEscHrs.val, 1) + ' h de máquina' : '' },
+      { rot: 'DAE arrecadada', val: moeda(soma(acu, function (r) { return r.dae; })), cls: 'acu texto',
+        sub: G.num(acu.filter(function (r) { return r.dae > 0; }).length) + ' com DAE informada' },
+      { rot: 'Técnicos atuando', val: G.num(new Set(acu.map(function (r) { return r.rt; }).filter(Boolean)).size), cls: 'acu',
+        ir: 'escritorio', sub: 'responsáveis pelas vistorias' },
+      { rot: 'Tipos de máquina', val: G.num(contar(acu, function (r) { return r.maq; }).size), cls: 'acu', sub: 'categorias identificadas' }
     ]);
     serieDe('gSerieAcu', acu, function (r) { return r.hrs; }, ACU);
     serieDe('gSerieAc', acu, function (r) { return r.ac; }, ACU);
@@ -586,10 +850,26 @@
     // ------------------------------------------------------------- cultura
     var maiorCult = ranking(areaCult, 1)[0];
     tiles('kpisCult', [
-      { rot: 'Hectares em culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', sub: G.num(nCult) + ' culturas declaradas' },
+      { _sec: 'Áreas e declarações' },
+      { rot: 'Hectares em culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', sub: 'soma das áreas declaradas' },
       { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', sub: 'no período selecionado' },
-      { rot: 'Cultura com mais área', val: maiorCult ? G.esc(maiorCult.rot) : '—', cls: 'mec', sub: maiorCult ? G.num(maiorCult.val, 1) + ' ha' : '' },
-      { rot: 'Atendimentos com cultura', val: G.num(D.filter(function (r) { return r.cult.length; }).length), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' }
+      { rot: 'Declarações de cultura', val: G.num(nCult), cls: 'mec', sub: 'linhas de cultura na planilha' },
+      { rot: 'Área média declarada', val: G.num(nCult ? haCult / nCult : 0, 1), un: 'ha', cls: 'mec', sub: 'por declaração' },
+      { rot: 'Atendimentos com cultura', val: G.num(nComCult), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' },
+      { rot: 'Culturas por atendimento', val: G.num(nComCult ? nCult / nComCult : 0, 1), cls: 'mec', sub: 'média declarada' },
+
+      { _sec: 'Destaques' },
+      { rot: 'Cultura com mais área', val: maiorCult ? G.esc(maiorCult.rot) : '—', cls: 'mec texto',
+        sub: maiorCult ? G.num(maiorCult.val, 1) + ' ha declarados' : '' },
+      { rot: 'Cultura mais frequente', val: topCultQtd ? G.esc(topCultQtd.rot) : '—', cls: 'mec texto',
+        sub: topCultQtd ? G.num(topCultQtd.val) + ' declarações' : '' },
+      { rot: 'Sistema predominante', val: topSis ? G.esc(topSis.rot) : '—', cls: 'mec texto',
+        sub: topSis ? G.num(topSis.val) + ' culturas' : '' },
+      { rot: 'Sistemas de cultivo', val: G.num(sis.size), cls: 'mec', sub: 'formas de produção citadas' },
+      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
+        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Municípios com cultura', val: G.num(new Set(D.filter(function (r) { return r.cult.length; })
+        .map(function (r) { return r.mun; })).size), cls: 'mec', ir: 'municipio', sub: 'com declaração de cultura' }
     ]);
     var rkCult = ranking(areaCult, 14);
     rkCult.forEach(function (d) { d.sub = '(' + G.num(qtdCult.get(d.rot) || 0) + ' reg.)'; });
@@ -604,11 +884,34 @@
 
     // ----------------------------------------------------------- município
     tiles('kpisMun', [
-      { rot: 'Municípios atendidos', val: G.num(new Set(D.map(function (r) { return r.mun; })).size), sub: 'na seleção atual' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', sub: 'total da seleção' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', sub: 'total da seleção' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', sub: 'total da seleção' },
-      { rot: 'Produtores atendidos', val: G.num(produtores(D)), sub: 'CPFs distintos' }
+      { _sec: 'Cobertura territorial' },
+      { rot: 'Municípios atendidos', val: G.num(nMun), sub: 'na seleção atual' },
+      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
+      { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
+      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: G.num(nTec) + ' técnicos atuando' },
+      { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), ir: 'registros', sub: 'em ' + (ANOS[0] || '2026') },
+
+      { _sec: 'Volume por território' },
+      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
+      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Hectares por município', val: G.num(nMun ? ha / nMun : 0, 1), un: 'ha', cls: 'mec', sub: 'média da seleção' },
+      { rot: 'Horas por município', val: G.num(nMun ? hrs / nMun : 0, 1), un: 'h', cls: 'acu', sub: 'média da seleção' },
+      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', ir: 'registros', sub: G.num(nComDae) + ' atendimentos com DAE' },
+
+      { _sec: 'Destaques por município' },
+      { rot: 'Mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto',
+        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Mais horas de máquina', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto',
+        sub: topMunHrs ? G.num(topMunHrs.val, 1) + ' h de escavadeira' : '' },
+      { rot: 'Mais tanques', val: topMunAc ? G.esc(topMunAc.rot) : '—', cls: 'acu texto',
+        sub: topMunAc ? G.num(topMunAc.val) + ' tanques' : '' },
+      { rot: 'Mais atendimentos', val: topMunAt ? G.esc(topMunAt.rot) : '—', cls: 'texto',
+        sub: topMunAt ? G.num(topMunAt.val) + ' vistorias' : '' },
+      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: 'declaradas no território' },
+      { rot: 'Municípios sem açudagem', val: G.num(nMun - new Set(acu.map(function (r) { return r.mun; })).size),
+        sub: 'só com mecanização' }
     ]);
     pintarCat('gMunHa2', ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 14));
     pintarCat('gMunHrs2', ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.hrs; }), 14), { cor: 'var(--s2)' });
@@ -617,6 +920,35 @@
     tabelaResumo('tMun', D, function (r) { return r.mun; }, 'Município');
 
     // --------------------------------------------------- escritório local
+    tiles('kpisEsc', [
+      { _sec: 'Estrutura de atendimento' },
+      { rot: 'Escritórios locais', val: G.num(nEsc), sub: 'com pelo menos 1 vistoria' },
+      { rot: 'Técnicos atuando', val: G.num(nTec), sub: 'responsáveis técnicos distintos' },
+      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
+      { rot: 'Municípios cobertos', val: G.num(nMun), ir: 'municipio', sub: 'na seleção atual' },
+      { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
+      { rot: 'Atendimentos por escritório', val: G.num(nEsc ? D.length / nEsc : 0, 1), sub: 'média da seleção' },
+
+      { _sec: 'Produção por escritório' },
+      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
+      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Hectares por escritório', val: G.num(nEsc ? ha / nEsc : 0, 1), un: 'ha', cls: 'mec', sub: 'média da seleção' },
+      { rot: 'Atendimentos por técnico', val: G.num(nTec ? D.length / nTec : 0, 1), sub: 'média da seleção' },
+      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', ir: 'registros', sub: G.num(nComDae) + ' atendimentos com DAE' },
+
+      { _sec: 'Destaques' },
+      { rot: 'Mais atendimentos', val: topEscAt ? G.esc(topEscAt.rot) : '—', cls: 'texto',
+        sub: topEscAt ? G.num(topEscAt.val) + ' vistorias' : '' },
+      { rot: 'Mais hectares', val: topEscHa ? G.esc(topEscHa.rot) : '—', cls: 'mec texto',
+        sub: topEscHa ? G.num(topEscHa.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Mais horas de máquina', val: topEscHrs ? G.esc(topEscHrs.rot) : '—', cls: 'acu texto',
+        sub: topEscHrs ? G.num(topEscHrs.val, 1) + ' h de escavadeira' : '' },
+      { rot: 'Técnico com mais vistorias', val: topTec ? G.esc(topTec.rot) : '—', cls: 'texto',
+        sub: topTec ? G.num(topTec.val) + ' atendimentos' : '' },
+      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao', sub: pct(mec.length, D.length) + ' do total' },
+      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem', sub: pct(acu.length, D.length) + ' do total' }
+    ]);
     pintarCat('gEsc', ranking(contar(D, function (r) { return r.esc; }), 14), { cor: 'var(--s3)' });
     pintarCat('gEscHa', ranking(somarPor(mec, function (r) { return r.esc; }, function (r) { return r.ha; }), 14));
     pintarCat('gEscHrs', ranking(somarPor(acu, function (r) { return r.esc; }, function (r) { return r.hrs; }), 14), { cor: 'var(--s2)' });
@@ -624,6 +956,34 @@
     tabelaResumo('tEsc', D, function (r) { return r.esc; }, 'Escritório local');
 
     // -------------------------------------------------------- beneficiário
+    // Estado vazio da aba: enquanto nenhum produtor está escolhido mostramos o
+    // panorama da seleção. Ao escolher um produtor, ficha() troca por
+    // contadores só dele.
+    benGeral = [
+      { _sec: 'Produtores atendidos' },
+      { rot: 'Produtores CPF distintos', val: G.num(produtores(D)), sub: 'CPFs válidos na planilha' },
+      { rot: 'Pares produtor + imóvel', val: G.num(nProd), sub: 'combinações distintas' },
+      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
+      { rot: 'Atendimentos por produtor', val: G.num(produtores(D) ? D.length / produtores(D) : 0, 1), sub: 'média da seleção' },
+      { rot: 'Municípios de origem', val: G.num(nMun), ir: 'municipio', sub: 'na seleção atual' },
+      { rot: 'Associações e cooperativas', val: G.num(nAssoc), sub: 'organizações citadas' },
+
+      { _sec: 'Perfil dos beneficiários' },
+      { rot: 'Mulheres atendidas', val: G.num(nSexoF), sub: pct(nSexoF, D.length) + ' dos atendimentos' },
+      { rot: 'Homens atendidos', val: G.num(nSexoM), sub: pct(nSexoM, D.length) + ' dos atendimentos' },
+      { rot: 'Sexo não informado', val: G.num(D.length - nSexoF - nSexoM), sub: pct(D.length - nSexoF - nSexoM, D.length) + ' dos atendimentos' },
+      { rot: 'Produtores com DAP', val: G.num(nDapSim), sub: 'DAP declarada como válida' },
+      { rot: 'DAP ausente ou vencida', val: G.num(nDapNao), sub: pct(nDapNao, D.length) + ' dos atendimentos' },
+      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', ir: 'registros', sub: G.num(nComDae) + ' atendimentos com DAE' },
+
+      { _sec: 'Serviços recebidos' },
+      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'em favor dos produtores' },
+      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'serviços de açudagem' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'construídos ou reformados' },
+      { rot: 'Beneficiários de mecanização', val: G.num(produtores(mec)), cls: 'mec', sub: 'CPFs distintos' },
+      { rot: 'Beneficiários de açudagem', val: G.num(produtores(acu)), cls: 'acu', sub: 'CPFs distintos' },
+      { rot: 'Culturas declaradas', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(nCult) + ' declarações' }
+    ];
     pintarCat('gSexo', ranking(contar(D, function (r) { return r.sexo; }), 5), { unidade: 'atendimentos', ordem: ['Masculino', 'Feminino', NI], multicor: true });
     pintarCat('gDap', ranking(contar(D, function (r) { return r.dap; }), 5), { unidade: 'atendimentos', ordem: ['Sim', 'Não', 'Vencida', NI], multicor: true });
     pintarCat('gCivil', ranking(contar(D, function (r) { return r.ec; }), 8), { cor: 'var(--s3)' });
@@ -631,9 +991,56 @@
     montarSelProd(D);
 
     // ----------------------------------------------------------- registros
+    tiles('kpisReg', [
+      { _sec: 'Volume de registros' },
+      { rot: 'Registros na seleção', val: G.num(D.length), sub: 'de ' + G.num(TODOS.length) + ' na base' },
+      { rot: 'Filtros ativos', val: G.num(ativos), sub: ativos ? 'restringindo a seleção' : 'nenhum filtro aplicado' },
+      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao', sub: pct(mec.length, D.length) + ' do total' },
+      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem', sub: pct(acu.length, D.length) + ' do total' },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), sub: 'em ' + (ANOS[0] || '2026') },
+      { rot: 'Registros por mês', val: G.num(nMeses ? D.length / nMeses : 0, 1), sub: 'média da seleção' },
+
+      { _sec: 'Conteúdo dos registros' },
+      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
+      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', sub: G.num(nComDae) + ' registros com DAE' },
+      { rot: 'Com formulário digitalizado', val: G.num(nComForm), sub: pct(nComForm, D.length) + ' dos registros' },
+      { rot: 'Com cultura declarada', val: G.num(nComCult), cls: 'mec', ir: 'cultura', sub: pct(nComCult, D.length) + ' dos registros' },
+
+      { _sec: 'Abrangência' },
+      { rot: 'Municípios', val: G.num(nMun), ir: 'municipio', sub: 'na seleção atual' },
+      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: 'com registro' },
+      { rot: 'Técnicos responsáveis', val: G.num(nTec), ir: 'escritorio', sub: 'assinando as vistorias' },
+      { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
+      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(nCult) + ' declarações' },
+      { rot: 'Associações citadas', val: G.num(nAssoc), ir: 'beneficiario', sub: 'organizações de produtores' }
+    ]);
     tabela(D);
     nota();
     fonteDados();
+
+    // ----------------------------------------------------------- relatório
+    tiles('kpisRel', [
+      { _sec: 'Abrangência do relatório' },
+      { rot: 'Municípios com registro', val: G.num(nMun), sub: 'disponíveis para relatório' },
+      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias consolidadas' },
+      { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
+      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: G.num(nTec) + ' técnicos atuando' },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), sub: 'em ' + (ANOS[0] || '2026') },
+      { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
+
+      { _sec: 'Totais consolidados' },
+      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: G.num(mec.length) + ' vistorias' },
+      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: G.num(acu.length) + ' vistorias' },
+      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'construídos ou reformados' },
+      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(haCult, 1) + ' ha declarados' },
+      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', sub: G.num(nComDae) + ' atendimentos com DAE' },
+      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
+        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' }
+    ]);
+    var griRel = el('relatorioGrid');
+    if (griRel && griRel.closest('.aba-conteudo.ativa')) renderRelatorio(D);
   }
 
   /* ------------------------------------------------------------------ tabela */
@@ -677,6 +1084,276 @@
     el('pagInfo').textContent = L.length ? 'Página ' + pag + ' de ' + paginas + ' — ' + G.num(L.length) + ' registro(s)' : '';
     el('pagAnt').disabled = pag <= 1;
     el('pagProx').disabled = pag >= paginas;
+  }
+
+  /* ============================================================ ABA RELATÓRIO */
+  function kpiRel(rot, val, sub) {
+    return '<div class="relatorio-kpi"><div class="kpi-rot">' + G.esc(rot) +
+      '</div><div class="kpi-val">' + val +
+      '</div><div class="kpi-sub">' + G.esc(sub) + '</div></div>';
+  }
+
+  var visRelatorio = 'quadros';
+  try { visRelatorio = localStorage.getItem('dash-relatorio-vis') || 'quadros'; } catch (e) {}
+
+  function aplicarVisRelatorio() {
+    var grid = el('relatorioGrid');
+    if (grid) grid.classList.toggle('lista', visRelatorio === 'lista');
+    var vis = el('relatorioVis');
+    if (vis) vis.querySelectorAll('button').forEach(function (b) {
+      b.classList.toggle('ativa', b.getAttribute('data-vis') === visRelatorio);
+    });
+  }
+
+  function renderRelatorio(D) {
+    var grid = el('relatorioGrid');
+    if (!grid) return;
+    aplicarVisRelatorio();
+    var muns = Array.from(new Set(D.map(function (r) { return r.mun; }))).filter(Boolean)
+      .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+
+    if (!muns.length) {
+      grid.innerHTML = '<p class="vazio">Nenhum município na seleção atual.</p>';
+      return;
+    }
+
+    grid.innerHTML = muns.map(function (mun) {
+      var sub = D.filter(function (r) { return r.mun === mun; });
+      var mec = sub.filter(function (r) { return r.pc === MEC; });
+      var acu = sub.filter(function (r) { return r.pc === ACU; });
+      var ha = soma(mec, function (r) { return r.ha; });
+      var hrs = soma(acu, function (r) { return r.hrs; });
+      var nAc = soma(acu, function (r) { return r.ac; });
+      return '<button class="mun-card" data-mun="' + G.esc(mun) + '" type="button">' +
+        '<div class="mun-card-nome">' + G.esc(mun) + '</div>' +
+        '<div class="mun-card-tags">' +
+        (mec.length ? '<span class="tag tag-mec">Mecaniza&ccedil;&atilde;o</span>' : '') +
+        (acu.length ? '<span class="tag tag-acu">A&ccedil;udagem</span>' : '') +
+        '</div>' +
+        '<div class="mun-card-stats">' +
+        '<span>' + G.num(sub.length) + ' atend.</span>' +
+        (ha ? '<span>' + G.num(ha, 1) + ' ha</span>' : '') +
+        (hrs ? '<span>' + G.num(hrs, 1) + ' h m&aacute;q.</span>' : '') +
+        (nAc ? '<span>' + G.num(nAc) + ' tanques</span>' : '') +
+        '</div></button>';
+    }).join('');
+
+    grid.querySelectorAll('.mun-card').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        abrirRelatorioMunicipio(btn.getAttribute('data-mun'), filtrar());
+      });
+    });
+
+    var q = el('relatorBusca') ? el('relatorBusca').value.trim().toLowerCase() : '';
+    if (q) {
+      grid.querySelectorAll('.mun-card').forEach(function (card) {
+        card.style.display = card.getAttribute('data-mun').toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+      });
+    }
+  }
+
+  function abrirRelatorioMunicipio(mun, D) {
+    var sub = D.filter(function (r) { return r.mun === mun; });
+    if (!sub.length) return;
+
+    var mec = sub.filter(function (r) { return r.pc === MEC; });
+    var acu = sub.filter(function (r) { return r.pc === ACU; });
+    var ha = soma(mec, function (r) { return r.ha; });
+    var hrs = soma(acu, function (r) { return r.hrs; });
+    var nAc = soma(acu, function (r) { return r.ac; });
+    var nProd = produtores(sub);
+    var dae = soma(sub, function (r) { return r.dae; });
+
+    var areaCult = new Map();
+    mec.forEach(function (r) {
+      r.cult.forEach(function (c) { areaCult.set(c[0], (areaCult.get(c[0]) || 0) + c[1]); });
+    });
+    var rkCult = ranking(areaCult, 30);
+
+    var tecMap = new Map();
+    sub.forEach(function (r) {
+      if (!r.rt) return;
+      if (!tecMap.has(r.rt)) tecMap.set(r.rt, { n: 0, esc: r.esc });
+      tecMap.get(r.rt).n++;
+    });
+    var rkTec = Array.from(tecMap, function (e) { return { rot: e[0], val: e[1].n, esc: e[1].esc }; })
+      .sort(function (a, b) { return b.val - a.val; });
+
+    var rkMaq = ranking(contar(mec, function (r) { return r.maq; }), 10);
+    var rkImpl = ranking(contar(mec, function (r) { return r.impl; }), 10);
+
+    var hoje = new Date().toLocaleDateString('pt-BR');
+
+    function tTbl(headers, rows) {
+      return '<div class="tabela-scroll relatorio-tbl"><table class="dados"><thead><tr>' +
+        headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    }
+
+    var htmlMec = '';
+    if (mec.length) {
+      var mesesMec = chavesMeses(mec);
+      var haMap = somarPor(mec, function (r) { return r.d.slice(0, 7); }, function (r) { return r.ha; });
+      var cntMecMap = somarPor(mec, function (r) { return r.d.slice(0, 7); }, function () { return 1; });
+      htmlMec = '<div class="relatorio-sec">' +
+        '<h2 class="relatorio-sec-tit mec">Mecaniza&ccedil;&atilde;o</h2>' +
+        '<div class="ficha">' +
+        '<div class="ficha-item"><div class="ficha-rot">Vistorias</div><div class="ficha-val">' + G.num(mec.length) + '</div></div>' +
+        '<div class="ficha-item"><div class="ficha-rot">Hectares</div><div class="ficha-val">' + G.num(ha, 1) + ' ha</div></div>' +
+        '<div class="ficha-item"><div class="ficha-rot">M&eacute;dia/atend.</div><div class="ficha-val">' + G.num(mec.length ? ha / mec.length : 0, 1) + ' ha</div></div>' +
+        '</div>' +
+        (rkCult.length ? '<h3>Culturas</h3>' + tTbl(['Cultura', 'Hectares', '%'],
+          rkCult.map(function (d) {
+            return '<tr><td>' + G.esc(d.rot) + '</td><td class="num">' + G.num(d.val, 1) +
+              '</td><td class="num">' + (ha ? (d.val / ha * 100).toFixed(1).replace('.', ',') : '0') + '%</td></tr>';
+          }).join('')) : '') +
+        (rkMaq.length ? '<h3>M&aacute;quinas utilizadas</h3>' + tTbl(['Equipamento', 'Ocorr&ecirc;ncias'],
+          rkMaq.map(function (d) { return '<tr><td>' + G.esc(d.rot) + '</td><td class="num">' + G.num(d.val) + '</td></tr>'; }).join('')) : '') +
+        (rkImpl.length ? '<h3>Implementos e servi&ccedil;os</h3>' + tTbl(['Implemento / Servi&ccedil;o', 'Ocorr&ecirc;ncias'],
+          rkImpl.map(function (d) { return '<tr><td>' + G.esc(d.rot) + '</td><td class="num">' + G.num(d.val) + '</td></tr>'; }).join('')) : '') +
+        (mesesMec.length ? '<h3>Por m&ecirc;s</h3>' + tTbl(['M&ecirc;s', 'Atendimentos', 'Hectares'],
+          mesesMec.map(function (k) {
+            return '<tr><td class="forte">' + mesRot(k) + '</td>' +
+              '<td class="num">' + G.num(cntMecMap.get(k) || 0) + '</td>' +
+              '<td class="num">' + G.num(haMap.get(k) || 0, 1) + '</td></tr>';
+          }).join('')) : '') +
+        '</div>';
+    }
+
+    var htmlAcu = '';
+    if (acu.length) {
+      var mesesAcu = chavesMeses(acu);
+      var hrsMap = somarPor(acu, function (r) { return r.d.slice(0, 7); }, function (r) { return r.hrs; });
+      var acMap  = somarPor(acu, function (r) { return r.d.slice(0, 7); }, function (r) { return r.ac; });
+      var cntAcuMap = somarPor(acu, function (r) { return r.d.slice(0, 7); }, function () { return 1; });
+      htmlAcu = '<div class="relatorio-sec">' +
+        '<h2 class="relatorio-sec-tit acu">A&ccedil;udagem</h2>' +
+        '<div class="ficha">' +
+        '<div class="ficha-item"><div class="ficha-rot">Vistorias</div><div class="ficha-val">' + G.num(acu.length) + '</div></div>' +
+        '<div class="ficha-item"><div class="ficha-rot">Horas m&aacute;quina</div><div class="ficha-val">' + G.num(hrs, 1) + ' h</div></div>' +
+        '<div class="ficha-item"><div class="ficha-rot">Tanques / a&ccedil;udes</div><div class="ficha-val">' + G.num(nAc) + '</div></div>' +
+        '<div class="ficha-item"><div class="ficha-rot">Horas/tanque</div><div class="ficha-val">' + (nAc ? G.num(hrs / nAc, 1) : '—') + ' h</div></div>' +
+        '</div>' +
+        (mesesAcu.length ? '<h3>Por m&ecirc;s</h3>' + tTbl(['M&ecirc;s', 'Atendimentos', 'Horas', 'Tanques'],
+          mesesAcu.map(function (k) {
+            return '<tr><td class="forte">' + mesRot(k) + '</td>' +
+              '<td class="num">' + G.num(cntAcuMap.get(k) || 0) + '</td>' +
+              '<td class="num">' + G.num(hrsMap.get(k) || 0, 1) + '</td>' +
+              '<td class="num">' + G.num(acMap.get(k) || 0) + '</td></tr>';
+          }).join('')) : '') +
+        '</div>';
+    }
+
+    var html = '<div class="relatorio-doc">' +
+      '<div class="relatorio-header">' +
+      '<div class="relatorio-header-org">Secretaria de Estado de Agricultura &ndash; SEAGRI/AC</div>' +
+      '<div class="relatorio-header-sub">Relat&oacute;rio de Mecaniza&ccedil;&atilde;o e A&ccedil;udagem &middot; 2026</div>' +
+      '</div>' +
+      '<h1 class="relatorio-mun-titulo">' + G.esc(mun) + '</h1>' +
+      '<div class="relatorio-kpis">' +
+      kpiRel('Atendimentos', G.num(sub.length), 'vistorias registradas') +
+      (mec.length ? kpiRel('Mecanização', G.num(mec.length), G.num(ha, 1) + ' ha mecanizados') : '') +
+      (acu.length ? kpiRel('Açudagem', G.num(acu.length), G.num(hrs, 1) + ' h de máquina') : '') +
+      (ha ? kpiRel('Hectares', G.num(ha, 1) + ' ha', 'total mecanizado') : '') +
+      (hrs ? kpiRel('Horas', G.num(hrs, 1) + ' h', 'de escavadeira') : '') +
+      (nAc ? kpiRel('Tanques', G.num(nAc), 'construídos ou reformados') : '') +
+      kpiRel('Produtores', G.num(nProd), 'CPFs distintos atendidos') +
+      (dae ? kpiRel('DAE', moeda(dae), 'arrecadada') : '') +
+      '</div>' +
+      '<div class="relatorio-secoes">' + htmlMec + htmlAcu + '</div>' +
+      (rkTec.length ? '<h2 class="relatorio-sec-tit">Responsáveis Técnicos</h2>' +
+        tTbl(['Técnico', 'Escritório Local', 'Vistorias'],
+          rkTec.map(function (d) {
+            return '<tr><td class="forte">' + G.esc(d.rot) + '</td><td>' + G.esc(d.esc || '—') +
+              '</td><td class="num">' + G.num(d.val) + '</td></tr>';
+          }).join('')) : '') +
+      '<h2 class="relatorio-sec-tit">Registros Detalhados</h2>' +
+      '<div class="relatorio-registros"><table class="dados" style="min-width:720px"><thead><tr>' +
+      '<th>Inser&ccedil;&atilde;o</th><th>Vistoria</th><th>Servi&ccedil;o</th>' +
+      '<th>Produtor / Propriedade</th><th>Culturas</th>' +
+      '<th>&Aacute;rea (ha)</th><th>Horas</th><th>Tanques</th><th>T&eacute;cnico</th>' +
+      '</tr></thead><tbody>' +
+      sub.map(function (r) {
+        return '<tr>' +
+          '<td class="num">' + dataBR(r.d) + '</td>' +
+          '<td class="num">' + dataBR(r.dv) + '</td>' +
+          '<td><span class="tag ' + (r.pc === MEC ? 'tag-mec' : 'tag-acu') + '">' + G.esc(r.pc) + '</span></td>' +
+          '<td class="forte">' + G.esc(r.prod || '—') + '<br><small class="fraco">' + G.esc(r.propr || '') + '</small></td>' +
+          '<td>' + (r.cult.length ? r.cult.map(function (c) { return G.esc(c[0]) + ' (' + G.num(c[1], 1) + ' ha)'; }).join(', ') : '—') + '</td>' +
+          '<td class="num">' + (r.ha ? G.num(r.ha, 1) : '—') + '</td>' +
+          '<td class="num">' + (r.hrs ? G.num(r.hrs, 1) : '—') + '</td>' +
+          '<td class="num">' + (r.ac ? G.num(r.ac) : '—') + '</td>' +
+          '<td>' + G.esc(r.rt || '—') + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="relatorio-footer">Gerado em ' + hoje + ' &middot; SEAGRI &ndash; Secretaria de Estado de Agricultura do Acre</div>' +
+      '</div>';
+
+    el('relatorioConteudo').innerHTML = html;
+    el('relatorioTitulo').textContent = mun;
+    el('relatorioOverlay').classList.add('show');
+  }
+
+  /* Gera um documento próprio em vez de imprimir a página: sem overlay, sem
+     scroll interno e com quebras de página controladas, para o conteúdo das
+     tabelas longas nunca ser cortado no PDF. */
+  var CSS_PDF =
+    '@page{size:A4;margin:14mm 12mm}' +
+    '*{box-sizing:border-box}' +
+    'body{margin:0;font:12px/1.45 "Segoe UI",system-ui,Arial,sans-serif;color:#1b2430;background:#fff}' +
+    '.relatorio-doc{max-width:100%}' +
+    '.relatorio-header{border-bottom:2px solid #2e7d4f;padding-bottom:8px;margin-bottom:14px}' +
+    '.relatorio-header-org{font-size:14px;font-weight:700;color:#2e7d4f;letter-spacing:.3px}' +
+    '.relatorio-header-sub{font-size:11px;color:#5a6672;margin-top:2px}' +
+    '.relatorio-mun-titulo{font-size:24px;margin:0 0 14px;color:#1b2430}' +
+    '.relatorio-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}' +
+    '.relatorio-kpi{border:1px solid #d8dee5;border-radius:7px;padding:8px 10px;background:#f7f9fa}' +
+    '.kpi-rot{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7885}' +
+    '.kpi-val{font-size:16px;font-weight:700;margin:2px 0 1px}' +
+    '.kpi-sub{font-size:9px;color:#6b7885}' +
+    '.relatorio-secoes{display:block}' +
+    '.relatorio-sec{margin-bottom:16px}' +
+    '.relatorio-sec-tit{font-size:15px;margin:18px 0 8px;padding-bottom:4px;border-bottom:1.5px solid #d8dee5;' +
+      'break-after:avoid;page-break-after:avoid}' +
+    '.relatorio-sec-tit.mec{color:#2e7d4f;border-color:#2e7d4f}' +
+    '.relatorio-sec-tit.acu{color:#1f6f9c;border-color:#1f6f9c}' +
+    'h3{font-size:12px;margin:12px 0 5px;color:#3a4652;break-after:avoid;page-break-after:avoid}' +
+    '.ficha{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:10px}' +
+    '.ficha-item{border:1px solid #d8dee5;border-radius:6px;padding:6px 8px;background:#f7f9fa}' +
+    '.ficha-rot{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7885}' +
+    '.ficha-val{font-size:12px;font-weight:600;margin-top:2px}' +
+    '.tabela-scroll,.relatorio-tbl,.relatorio-registros{overflow:visible!important;max-height:none!important}' +
+    'table{width:100%!important;min-width:0!important;border-collapse:collapse;font-size:10px;margin-bottom:10px}' +
+    'thead{display:table-header-group}' +
+    'tr{break-inside:avoid;page-break-inside:avoid}' +
+    'th{text-align:left;background:#eef2f4;border-bottom:1.5px solid #c9d2da;padding:5px 6px;' +
+      'font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:#4a5561}' +
+    'td{border-bottom:1px solid #e5eaee;padding:4px 6px;vertical-align:top}' +
+    'td.num{text-align:right;white-space:nowrap}' +
+    'td.forte{font-weight:600}' +
+    '.fraco,small.fraco{color:#7b8792;font-size:9px}' +
+    '.tag{display:inline-block;padding:1px 6px;border-radius:20px;font-size:8.5px;font-weight:700;' +
+      'border:1px solid #c9d2da;white-space:nowrap}' +
+    '.tag-mec{color:#2e7d4f;border-color:#2e7d4f;background:#eaf5ee}' +
+    '.tag-acu{color:#1f6f9c;border-color:#1f6f9c;background:#e9f2f8}' +
+    'a{color:inherit;text-decoration:none}' +
+    '.relatorio-footer{margin-top:18px;padding-top:8px;border-top:1px solid #d8dee5;' +
+      'font-size:9px;color:#6b7885;text-align:center}';
+
+  function exportarRelatorioPdf(titulo, corpo) {
+    var w = window.open('', '_blank');
+    if (!w) {
+      alert('O navegador bloqueou a janela de exportação. Libere os pop-ups para este site e tente de novo.');
+      return;
+    }
+    w.document.open();
+    w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
+      '<title>Relatório — ' + G.esc(titulo) + '</title><style>' + CSS_PDF + '</style></head><body>' +
+      corpo + '</body></html>');
+    w.document.close();
+    w.focus();
+    setTimeout(function () { w.print(); }, 350);
   }
 
   /* ------------------------------------------------------- nota de qualidade */
@@ -955,6 +1632,38 @@
   el('pagAnt').addEventListener('click', function () { pag--; tabela(filtrar()); });
   el('pagProx').addEventListener('click', function () { pag++; tabela(filtrar()); });
   el('selProd').addEventListener('change', function () { ficha(filtrar()); });
+  el('buscaProd').addEventListener('input', function () {
+    filtrarSelProd(el('selProd').value);
+    ficha(filtrar());
+  });
+  el('btnRelatorioFechar').addEventListener('click', function () {
+    el('relatorioOverlay').classList.remove('show');
+  });
+  el('relatorioOverlay').addEventListener('click', function (e) {
+    if (e.target === el('relatorioOverlay')) el('relatorioOverlay').classList.remove('show');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && el('relatorioOverlay').classList.contains('show')) {
+      el('relatorioOverlay').classList.remove('show');
+    }
+  });
+  el('btnRelatorioPdf').addEventListener('click', function () {
+    exportarRelatorioPdf(el('relatorioTitulo').textContent, el('relatorioConteudo').innerHTML);
+  });
+  el('relatorioVis').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-vis]');
+    if (!btn) return;
+    visRelatorio = btn.getAttribute('data-vis');
+    try { localStorage.setItem('dash-relatorio-vis', visRelatorio); } catch (err) {}
+    aplicarVisRelatorio();
+  });
+  el('relatorBusca').addEventListener('input', function () {
+    var q = this.value.trim().toLowerCase();
+    var cards = el('relatorioGrid').querySelectorAll('.mun-card');
+    cards.forEach(function (card) {
+      card.style.display = (!q || card.getAttribute('data-mun').toLowerCase().indexOf(q) >= 0) ? '' : 'none';
+    });
+  });
   window.addEventListener('resize', (function () {
     var t;
     return function () { clearTimeout(t); t = setTimeout(render, 220); };

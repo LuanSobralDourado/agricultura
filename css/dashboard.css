@@ -49,6 +49,11 @@ html[data-tema="escuro"]{
 html{color-scheme:light}
 html[data-tema="escuro"]{color-scheme:dark}
 
+/* o [hidden] do navegador é `display:none` sem classe nenhuma, então qualquer
+   regra de classe com display (.aba, .filtro, .upload-acoes) o vence. Sem isto
+   a aba de administração aparece para todo mundo mesmo sem senha. */
+[hidden]{display:none!important}
+
 body{min-height:100vh;display:flex;flex-direction:column;background:var(--plano);color:var(--tinta)}
 
 /* --------------------------------- ajustes do chrome compartilhado (base.css) */
@@ -87,29 +92,44 @@ header p{font-size:12px;opacity:.9;margin:0}
 .aba.ativa{color:var(--acento);border-bottom-color:var(--acento)}
 .aba.ativa svg{opacity:1}
 
-.wrap{flex:1;width:100%;max-width:1720px;margin:0 auto;padding:18px 20px 36px}
+.wrap{flex:1;width:100%;max-width:1920px;margin:0 auto;padding:18px 26px 36px;
+  display:flex;align-items:flex-start;gap:22px}
+.conteudo-abas{flex:1;min-width:0}
 .aba-conteudo{display:none}
 .aba-conteudo.ativa{display:block}
 
 /* ------------------------------------------------------------------ filtros */
-.filtros{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+.filtros{display:flex;flex-direction:column;gap:10px;align-items:stretch;
+  /* largura enxuta: só o suficiente para o maior rótulo ("Responsável técnico",
+     ~135px) caber numa linha — o resto da página fica para os gráficos */
+  flex:0 0 206px;
   background:var(--superficie);border:1px solid var(--anel);border-radius:12px;
-  padding:13px 16px;box-shadow:var(--sombra-p);margin-bottom:16px}
-.filtro{display:flex;flex-direction:column;gap:5px;flex:1 1 150px;min-width:128px;max-width:260px}
-.filtro label{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tinta3)}
+  padding:16px 14px;box-shadow:var(--sombra-p);
+  position:sticky;top:56px;align-self:flex-start;
+  /* ocupa toda a altura visível da página e mostra todos os filtros de uma vez:
+     sem rolagem interna — as folgas entre os campos é que crescem */
+  height:calc(100vh - 72px);overflow-y:auto}
+.filtros .filtro{flex:0 0 auto}
+.filtros .filtros-acoes{margin-top:auto}
+.filtro{display:flex;flex-direction:column;gap:5px;flex:none;width:100%;min-width:0;max-width:none}
+.filtro label{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tinta3);
+  white-space:nowrap}
 .filtro select{padding:8px 10px;border:1.5px solid var(--linha-t);border-radius:8px;
   background:var(--superficie);font-size:13px;font-family:inherit;color:var(--tinta);outline:none;cursor:pointer}
 .filtro select:focus{border-color:var(--verde2)}
-.filtros-acoes{display:flex;gap:8px;align-items:center;flex:0 0 auto}
+.filtros-acoes{display:flex;gap:8px;align-items:center;flex:none;width:100%}
+.filtros-acoes .btn{flex:1}
 .btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;
   cursor:pointer;border:1px solid var(--linha-t);background:var(--superficie2);color:var(--tinta2);
   transition:background .15s,color .15s}
 .btn:hover{background:var(--grade);color:var(--tinta)}
-.filtro-resumo{font-size:12px;color:var(--tinta2);flex:1 1 100%;margin-top:2px}
+.filtro-resumo{font-size:11.5px;color:var(--tinta2);flex:none;width:100%;margin-top:2px}
 .filtro-resumo strong{color:var(--acento)}
 
 /* --------------------------------------------------------------- stat tiles */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));gap:12px;margin-bottom:16px}
+/* no máximo 6 contadores por linha — colunas fixas, não auto-fit, senão em
+   tela larga entram 8 ou 9 e o cartão fica ilegível */
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .kpi{background:var(--superficie);border:1px solid var(--anel);border-radius:12px;padding:15px 17px;
   box-shadow:var(--sombra-p);border-left:4px solid var(--verde);display:block;
   text-decoration:none;color:inherit;text-align:left;font-family:inherit;width:100%;
@@ -124,6 +144,21 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
 .kpi-sub{font-size:12px;color:var(--tinta2);margin-top:6px;line-height:1.4}
 .kpi.mec{border-left-color:var(--mec)}
 .kpi.acu{border-left-color:var(--acu)}
+/* contador cujo valor é texto (nome de município, cultura, valor em reais):
+   27px estoura o cartão, então cai para um corpo menor e pode quebrar linha */
+.kpi.texto .kpi-val{font-size:17px;line-height:1.3;overflow-wrap:anywhere}
+
+/* ---------- cabeçalho de seção dentro do grid de contadores ---------- */
+/* ocupa a linha inteira e serve de rótulo para o grupo abaixo dele */
+.kpis-sec{grid-column:1 / -1;display:flex;align-items:center;gap:10px;
+  padding:6px 2px 2px;margin-top:4px}
+.kpis-sec:first-child{margin-top:0}
+.kpis-sec span{font-size:10.5px;font-weight:700;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--tinta3);white-space:nowrap}
+.kpis-sec::after{content:'';flex:1;height:1px;background:var(--linha-t)}
+
+/* ---- escritório: 2 grupos por linha (o painel-grid geral usa 3) ---------- */
+.aba-conteudo[data-aba="escritorio"] .painel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 
 /* ------------------------------------------------------------------ painéis */
 /* 3 colunas em telas largas, 2 em notebook/tablet, 1 no celular — colunas
@@ -169,6 +204,10 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
 .legenda{display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:10px}
 .legenda-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--tinta2)}
 .legenda-cor{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+/* métrica secundária (ha, horas) exibida ao lado do nome da série na legenda */
+.legenda-det{font-size:11.5px;font-weight:600;color:var(--tinta);margin-left:2px;
+  background:var(--superficie2);border:1px solid var(--linha-t);border-radius:5px;
+  padding:1px 6px;white-space:nowrap}
 
 .clicavel .barra-rot,.clicavel .barra-pista,.clicavel .barra-val,
 .clicavel .col-item,.clicavel path[data-rot],.clicavel .rosca-item,
@@ -228,6 +267,9 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
 .tooltip-tit{font-weight:700;color:var(--tinta);margin-bottom:5px;font-size:12px}
 .tooltip-l{display:flex;align-items:center;gap:6px;line-height:1.7}
 .tooltip-l b{color:var(--tinta);font-variant-numeric:tabular-nums;margin-left:auto;padding-left:12px}
+/* sublinha da métrica secundária (ha/hrs) no tooltip de série */
+.tooltip-sub{opacity:.75;padding-left:18px;font-size:11px;line-height:1.5}
+.tooltip-sub b{font-size:11px}
 
 /* ------------------------------------------------------------------- tabelas */
 .tabela-cab{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -235,6 +277,9 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
   font-family:inherit;outline:none;min-width:200px;flex:1 1 240px;
   background:var(--superficie);color:var(--tinta)}
 .busca:focus{border-color:var(--verde2)}
+/* ficha do produtor: campo de busca livre + lista, lado a lado */
+.prod-cab #selProd{cursor:pointer;flex:1 1 320px}
+.prod-cab #selProd:disabled{opacity:.55;cursor:not-allowed}
 .tabela-scroll{overflow-x:auto;border:1px solid var(--linha-t);border-radius:8px;-webkit-overflow-scrolling:touch}
 table.dados{width:100%;border-collapse:collapse;font-size:12.5px}
 table.dados th{background:var(--superficie2);text-align:left;padding:9px 12px;font-size:11px;font-weight:700;
@@ -314,18 +359,27 @@ footer{padding:18px 24px;font-size:12px;color:var(--tinta3);text-align:center;bo
 /* notebook e tablet em paisagem */
 @media(max-width:1400px){
   .painel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
   .kpi-val{font-size:24px}
 }
 
-/* tablet em retrato */
+/* tablet em retrato — filtros voltam para faixa horizontal no topo */
 @media(max-width:1024px){
-  .wrap{padding:16px 14px 32px}
+  .wrap{padding:16px 14px 32px;display:block}
+  .filtros{position:static;max-height:none;overflow-y:visible;
+    flex-direction:row;flex-wrap:wrap;align-items:flex-end;
+    gap:12px;flex:none;width:auto;margin-bottom:16px}
+  .filtro{flex:1 1 150px;min-width:128px;max-width:260px}
+  .filtros-acoes{flex:0 0 auto;width:auto}
+  .filtros-acoes .btn{flex:none}
+  .filtro-resumo{flex:1 1 100%;width:auto}
+  .aba-conteudo[data-aba="escritorio"] .painel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .painel.largo .barras{grid-template-columns:minmax(72px,26%) minmax(40px,1fr) auto}
   .abas-pista{justify-content:flex-start}
   .aba{padding:9px 13px 7px;font-size:12px}
   .rosca-box{justify-content:center}
   .colunas{height:214px}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 
 /* uma coluna só quando o painel duplo ficaria estreito demais */
@@ -387,4 +441,104 @@ footer{padding:18px 24px;font-size:12px;color:var(--tinta3);text-align:center;bo
 
 @media(prefers-reduced-motion:reduce){
   .barra-fill,.col-fill,.kpi{transition:none}
+}
+
+/* ---- consistência de altura entre tipos de gráfico ---- */
+/* cap das barras horizontais para não crescer além da altura do gráfico de séries */
+[data-tipos] > .barras{max-height:280px;overflow-y:auto}
+
+/* ============================================================ ABA RELATÓRIO */
+.relatorio-cab{margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.relatorio-cab .busca{max-width:340px;flex:1 1 240px;display:block}
+.relatorio-vis{display:flex;gap:0;border:1.5px solid var(--linha-t);border-radius:9px;overflow:hidden;flex:none}
+.relatorio-vis button{display:flex;align-items:center;gap:6px;padding:8px 14px;border:0;
+  background:var(--superficie);color:var(--tinta2);font-family:inherit;font-size:12.5px;
+  font-weight:600;cursor:pointer;transition:background .15s,color .15s}
+.relatorio-vis button + button{border-left:1.5px solid var(--linha-t)}
+.relatorio-vis button svg{width:15px;height:15px}
+.relatorio-vis button:hover{background:var(--grade)}
+.relatorio-vis button.ativa{background:var(--acento);color:#fff}
+
+.relatorio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:14px}
+.relatorio-grid.lista{display:flex;flex-direction:column;gap:8px}
+.relatorio-grid.lista .mun-card{flex-direction:row;align-items:center;gap:16px;
+  min-height:0;padding:12px 16px;border-top-width:1.5px;border-left:3px solid var(--acento)}
+.relatorio-grid.lista .mun-card:hover{transform:none}
+.relatorio-grid.lista .mun-card-nome{flex:0 0 210px;font-size:14.5px}
+.relatorio-grid.lista .mun-card-tags{flex:0 0 auto}
+.relatorio-grid.lista .mun-card-stats{flex-direction:row;gap:18px;margin:0 0 0 auto;
+  border-top:0;padding-top:0;flex-wrap:wrap;justify-content:flex-end}
+
+.mun-card{background:var(--superficie);border:1.5px solid var(--anel);border-radius:14px;
+  padding:16px 14px;cursor:pointer;text-align:left;font-family:inherit;
+  transition:transform .15s,box-shadow .15s,border-color .15s;
+  display:flex;flex-direction:column;gap:8px;min-height:130px;
+  border-top:3px solid var(--acento);color:inherit}
+.mun-card:hover{transform:translateY(-3px);box-shadow:0 8px 22px rgba(0,0,0,.13);border-color:var(--acento)}
+.mun-card-nome{font-size:14px;font-weight:700;color:var(--tinta);line-height:1.3}
+.mun-card-tags{display:flex;gap:4px;flex-wrap:wrap}
+.mun-card-stats{display:flex;flex-direction:column;gap:2px;margin-top:auto;
+  border-top:1px solid var(--linha-t);padding-top:8px}
+.mun-card-stats span{font-size:11.5px;color:var(--tinta2)}
+
+/* ---------------------------------------------------------- modal relatório */
+.relatorio-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);
+  z-index:1500;align-items:center;justify-content:center;padding:20px}
+.relatorio-overlay.show{display:flex}
+.relatorio-modal{background:var(--superficie);border-radius:16px;
+  max-width:1040px;width:100%;max-height:90vh;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,.35)}
+.relatorio-modal-cab{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:14px 22px;border-bottom:1px solid var(--linha-t);
+  position:sticky;top:0;background:var(--superficie);z-index:10;flex-shrink:0}
+.relatorio-modal-cab h2{font-size:19px;font-weight:700;color:var(--tinta);margin:0;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.relatorio-modal-acoes{display:flex;gap:8px;flex-shrink:0}
+.relatorio-modal-body{padding:24px;overflow-y:auto;flex:1}
+
+/* ---- conteúdo do documento relatório ---- */
+.relatorio-header{text-align:center;margin-bottom:18px;padding-bottom:14px;
+  border-bottom:2px solid var(--acento)}
+.relatorio-header-org{font-size:13.5px;font-weight:700;color:var(--tinta)}
+.relatorio-header-sub{font-size:12px;color:var(--tinta3);margin-top:3px}
+.relatorio-mun-titulo{font-size:24px;font-weight:700;color:var(--tinta);
+  text-align:center;margin:14px 0 20px}
+.relatorio-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));
+  gap:10px;margin-bottom:22px}
+.relatorio-kpi{background:var(--superficie2);border:1px solid var(--anel);
+  border-radius:10px;padding:11px 13px}
+.relatorio-kpi .kpi-rot{font-size:10.5px}
+.relatorio-kpi .kpi-val{font-size:21px}
+.relatorio-kpi .kpi-sub{font-size:11px}
+.relatorio-secoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:18px;margin-bottom:22px}
+.relatorio-sec{border:1px solid var(--linha-t);border-radius:10px;padding:16px}
+.relatorio-sec h3{font-size:12px;font-weight:700;color:var(--tinta2);
+  margin:14px 0 8px;text-transform:uppercase;letter-spacing:.4px}
+.relatorio-sec h3:first-of-type{margin-top:12px}
+.relatorio-sec-tit{font-size:16px;font-weight:700;color:var(--tinta);
+  margin:22px 0 12px;padding-bottom:7px;border-bottom:2px solid var(--linha-t)}
+.relatorio-sec-tit.mec{border-bottom-color:var(--mec);color:var(--mec)}
+.relatorio-sec-tit.acu{border-bottom-color:var(--acu);color:var(--acu)}
+.relatorio-tbl{width:100%;margin-bottom:0}
+.relatorio-registros{max-height:360px;overflow-y:auto;
+  border:1px solid var(--linha-t);border-radius:8px;margin-top:6px}
+.relatorio-footer{text-align:center;font-size:11px;color:var(--tinta3);
+  margin-top:22px;padding-top:12px;border-top:1px solid var(--linha-t)}
+
+/* ================================================================ IMPRESSÃO */
+@media print{
+  body>*{visibility:hidden}
+  .relatorio-overlay.show,.relatorio-overlay.show *{visibility:visible}
+  .relatorio-overlay.show{position:fixed;inset:0;background:#fff;
+    padding:0;overflow:auto;display:block}
+  .relatorio-modal{max-height:none;overflow:visible;box-shadow:none;
+    border-radius:0;border:none;max-width:100%}
+  .relatorio-modal-cab{position:static;border-bottom:1px solid #ccc}
+  .relatorio-modal-acoes{display:none}
+  .relatorio-modal-body{overflow:visible;max-height:none;padding:20px}
+  .relatorio-registros{max-height:none;overflow:visible}
+  .mun-card,.painel,.abas,.filtros,footer{display:none!important}
+  table.dados{page-break-inside:auto}
+  tr{page-break-inside:avoid}
 }
