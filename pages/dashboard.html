@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEAGRI - Painel da Mecaniza&ccedil;&atilde;o 2026</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<meta name="theme-color" content="#1b5e20">
+<meta property="og:title" content="SEAGRI &ndash; Painel da Mecaniza&ccedil;&atilde;o 2026">
+<meta property="og:description" content="Painel de acompanhamento das vistorias de mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem da SEAGRI/AC.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="../assets/brasao.png">
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/dashboard.css">
+<script>
+  /* aplica o tema antes da pintura para não piscar branco */
+  (function () {
+    try {
+      var t = localStorage.getItem('seagri_tema');
+      if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+      document.documentElement.setAttribute('data-tema', t);
+    } catch (e) { document.documentElement.setAttribute('data-tema', 'claro'); }
+  })();
+</script>
+</head>
+<body>
+<nav class="sidebar open" id="sidebar">
+  <div class="sidebar-head">
+    <div class="sidebar-head-info">
+      <div class="sidebar-head-sub">Agricultura</div>
+      <div class="sidebar-head-title">Sistema Interno</div>
+    </div>
+  </div>
+  <div class="sidebar-nav">
+    <a class="sidebar-link" href="index.html" data-page="index">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      In&iacute;cio
+    </a>
+    <a class="sidebar-link" href="organograma.html" data-page="organograma">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><rect x="1" y="17" width="6" height="4" rx="1"/><rect x="9" y="17" width="6" height="4" rx="1"/><rect x="17" y="17" width="6" height="4" rx="1"/><path d="M12 6v5M4 17v-4h16v4"/></svg>
+      Organograma
+    </a>
+    <a class="sidebar-link" href="portarias.html" data-page="portarias">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Portarias
+    </a>
+    <a class="sidebar-link" href="dashboard.html" data-page="dashboard">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboards
+    </a>
+    <a class="sidebar-link" href="chamados.html" data-page="chamados" id="sidebarLinkChamados">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Chamados
+    </a>
+    <a class="sidebar-link" href="contatos.html" data-page="contatos" id="sidebarLinkContatos">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      Contatos
+    </a>
+  </div>
+  <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
+</nav>
+<button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
+<script src="../js/sidebar.js"></script>
+
+<header>
+  <h1>Painel da Mecaniza&ccedil;&atilde;o &mdash; 2026</h1>
+  <p>Secretaria de Agricultura do Acre &middot; mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem</p>
+  <div class="header-acoes">
+    <button class="tema-btn" id="temaBtn" type="button" aria-label="Alternar tema"></button>
+    <button class="tema-btn" id="adminBtn" type="button">&#128274;<span>Admin</span></button>
+  </div>
+</header>
+
+<!-- ------------------------------------------------------------ menu de abas -->
+<nav class="abas" id="abas" aria-label="Se&ccedil;&otilde;es do painel">
+  <div class="abas-pista">
+    <button class="aba" data-aba="geral" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      Vis&atilde;o geral
+    </button>
+    <button class="aba" data-aba="mecanizacao" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="17" r="3"/><circle cx="18" cy="17" r="2"/><path d="M4 14V7h6l2 5h6v5"/></svg>
+      Mecaniza&ccedil;&atilde;o
+    </button>
+    <button class="aba" data-aba="acudagem" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3 4 5 6.5 5 9a5 5 0 01-10 0c0-2.5 2-5 5-9z"/></svg>
+      A&ccedil;udagem
+    </button>
+    <button class="aba" data-aba="cultura" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V9"/><path d="M12 9c0-4 3-7 7-7 0 4-3 7-7 7z"/><path d="M12 13C9 13 6 10.5 6 6c3.5 0 6 2.5 6 7z"/></svg>
+      Cultura
+    </button>
+    <button class="aba" data-aba="municipio" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Munic&iacute;pio
+    </button>
+    <button class="aba" data-aba="escritorio" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+      Escrit&oacute;rio Local
+    </button>
+    <button class="aba" data-aba="beneficiario" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+      Benefici&aacute;rio
+    </button>
+    <button class="aba" data-aba="registros" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Registros
+    </button>
+    <button class="aba aba-admin" data-aba="admin" type="button" id="abaAdmin" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/><path d="M12 11v4M12 8.5v.5"/></svg>
+      Atualizar dados
+    </button>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- ------------------------------------------------------------- filtros -->
+  <section class="filtros" aria-label="Filtros">
+    <div class="filtro" id="filtroAno" hidden>
+      <label for="fAno">Ano de inser&ccedil;&atilde;o</label>
+      <select id="fAno"></select>
+    </div>
+    <div class="filtro">
+      <label for="fMes">M&ecirc;s de inser&ccedil;&atilde;o</label>
+      <select id="fMes"></select>
+    </div>
+    <div class="filtro">
+      <label for="fPonto">Servi&ccedil;o</label>
+      <select id="fPonto"></select>
+    </div>
+    <div class="filtro">
+      <label for="fMun">Munic&iacute;pio</label>
+      <select id="fMun"></select>
+    </div>
+    <div class="filtro">
+      <label for="fEsc">Escrit&oacute;rio local</label>
+      <select id="fEsc"></select>
+    </div>
+    <div class="filtro">
+      <label for="fCult">Cultura</label>
+      <select id="fCult"></select>
+    </div>
+    <div class="filtro">
+      <label for="fTec">Respons&aacute;vel t&eacute;cnico</label>
+      <select id="fTec"></select>
+    </div>
+    <div class="filtros-acoes">
+      <button class="btn" id="btnLimpar" type="button">Limpar filtros</button>
+    </div>
+    <p class="filtro-resumo" id="resumo"></p>
+  </section>
+
+  <!-- ==================================================== ABA: VISÃO GERAL -->
+  <div class="aba-conteudo" data-aba="geral">
+    <section class="kpis" id="kpis" aria-label="Indicadores principais"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Hectares mecanizados por munic&iacute;pio</h2>
+          <p class="sub">Principal indicador da mecaniza&ccedil;&atilde;o. Clique num munic&iacute;pio para abrir o detalhe.</p>
+        </div></div>
+        <div id="gMunHa" data-tipos="barras,colunas,rosca,pizza,tabela" data-ir="municipio" data-clique="mun"
+             data-unidade="ha" data-dec="1"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Mecaniza&ccedil;&atilde;o &times; a&ccedil;udagem</h2>
+          <p class="sub">Distribui&ccedil;&atilde;o dos atendimentos entre os dois servi&ccedil;os.</p>
+        </div></div>
+        <div id="gTipo" data-tipos="rosca,pizza,barras,colunas,tabela" data-clique="pc"></div>
+      </section>
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>&Aacute;rea por cultura</h2>
+          <p class="sub">Hectares declarados por cultura. Clique para filtrar a cultura.</p>
+        </div></div>
+        <div id="gCultGeral" data-tipos="barras,colunas,rosca,pizza,tabela" data-ir="cultura" data-clique="cult"
+             data-unidade="ha" data-dec="1"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Sistema de cultivo</h2>
+          <p class="sub">Culturas declaradas por sistema de produ&ccedil;&atilde;o.</p>
+        </div></div>
+        <div id="gSistemaGeral" data-tipos="rosca,pizza,barras,colunas,tabela" data-ir="cultura"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por m&ecirc;s de inser&ccedil;&atilde;o</h2>
+          <p class="sub">Registros lan&ccedil;ados em cada m&ecirc;s de 2026, separados por servi&ccedil;o. Clique num m&ecirc;s para filtrar.</p>
+        </div></div>
+        <div id="gSerie" data-tipos="colunas,linha,area,tabela" data-ir="registros" data-clique="mes"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Horas de m&aacute;quina por munic&iacute;pio</h2>
+          <p class="sub">Indicador da a&ccedil;udagem.</p>
+        </div></div>
+        <div id="gMunHrs" data-tipos="barras,colunas,rosca,pizza,tabela" data-ir="acudagem" data-clique="mun"
+             data-unidade="h" data-dec="1"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tanques e a&ccedil;udes por munic&iacute;pio</h2>
+          <p class="sub">Quantidade constru&iacute;da ou reformada.</p>
+        </div></div>
+        <div id="gMunAc" data-tipos="barras,colunas,rosca,pizza,tabela" data-ir="acudagem" data-clique="mun"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por escrit&oacute;rio local</h2>
+          <p class="sub">Vistorias registradas por cada escrit&oacute;rio.</p>
+        </div></div>
+        <div id="gEscGeral" data-tipos="barras,colunas,rosca,pizza,tabela" data-ir="escritorio" data-clique="esc"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ==================================================== ABA: MECANIZAÇÃO -->
+  <div class="aba-conteudo" data-aba="mecanizacao">
+    <section class="kpis" id="kpisMec" aria-label="Indicadores de mecaniza&ccedil;&atilde;o"></section>
+    <div class="painel-grid">
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Hectares mecanizados por m&ecirc;s</h2>
+          <p class="sub">Soma da &aacute;rea mecanizada em cada m&ecirc;s de vistoria.</p>
+        </div></div>
+        <div id="gSerieMec" data-tipos="colunas,linha,area,tabela" data-clique="mes" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Hectares por munic&iacute;pio</h2>
+          <p class="sub">&Aacute;rea mecanizada acumulada.</p>
+        </div></div>
+        <div id="gMecMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="ha" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>M&aacute;quinas utilizadas</h2>
+          <p class="sub">Um atendimento pode usar mais de uma m&aacute;quina.</p>
+        </div></div>
+        <div id="gMaq" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Implementos e servi&ccedil;os</h2>
+          <p class="sub">Tipo de implemento ou servi&ccedil;o executado.</p>
+        </div></div>
+        <div id="gImpl" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tipo de trator</h2>
+          <p class="sub">Classifica&ccedil;&atilde;o do equipamento empregado.</p>
+        </div></div>
+        <div id="gTrator" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Faixas de &aacute;rea atendida</h2>
+          <p class="sub">Distribui&ccedil;&atilde;o dos atendimentos pelo tamanho da &aacute;rea.</p>
+        </div></div>
+        <div id="gFaixa" data-tipos="colunas,barras,pizza,rosca,tabela"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ======================================================= ABA: AÇUDAGEM -->
+  <div class="aba-conteudo" data-aba="acudagem">
+    <section class="kpis" id="kpisAcu" aria-label="Indicadores de a&ccedil;udagem"></section>
+    <div class="painel-grid">
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Horas de m&aacute;quina por m&ecirc;s</h2>
+          <p class="sub">Horas de escavadeira registradas em cada m&ecirc;s de vistoria.</p>
+        </div></div>
+        <div id="gSerieAcu" data-tipos="colunas,linha,area,tabela" data-clique="mes" data-dec="1"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tanques e a&ccedil;udes por m&ecirc;s</h2>
+          <p class="sub">Quantidade atendida em cada m&ecirc;s.</p>
+        </div></div>
+        <div id="gSerieAc" data-tipos="colunas,linha,area,tabela" data-clique="mes"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tanques por munic&iacute;pio</h2>
+          <p class="sub">Quantidade de a&ccedil;udes e tanques.</p>
+        </div></div>
+        <div id="gAcuMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Horas por escrit&oacute;rio local</h2>
+          <p class="sub">Horas de m&aacute;quina atribu&iacute;das a cada escrit&oacute;rio.</p>
+        </div></div>
+        <div id="gAcuEsc" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="esc" data-unidade="h" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>M&aacute;quinas na a&ccedil;udagem</h2>
+          <p class="sub">Equipamentos usados nos servi&ccedil;os.</p>
+        </div></div>
+        <div id="gMaqAcu" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tanques por atendimento</h2>
+          <p class="sub">Quantos tanques foram atendidos em cada vistoria.</p>
+        </div></div>
+        <div id="gAcuQtd" data-tipos="colunas,barras,pizza,rosca,tabela"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ======================================================== ABA: CULTURA -->
+  <div class="aba-conteudo" data-aba="cultura">
+    <section class="kpis" id="kpisCult" aria-label="Indicadores de cultura"></section>
+    <div class="painel-grid">
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>&Aacute;rea por cultura</h2>
+          <p class="sub">Hectares somando as at&eacute; quatro culturas de cada atendimento.</p>
+        </div></div>
+        <div id="gCult" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="cult" data-unidade="ha" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por cultura</h2>
+          <p class="sub">Quantas vezes cada cultura foi declarada.</p>
+        </div></div>
+        <div id="gCultQtd" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="cult"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Sistema de cultivo</h2>
+          <p class="sub">Culturas declaradas por sistema de produ&ccedil;&atilde;o.</p>
+        </div></div>
+        <div id="gSistema" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Culturas por atendimento</h2>
+          <p class="sub">Quantas culturas foram declaradas em cada vistoria.</p>
+        </div></div>
+        <div id="gCultPorReg" data-tipos="colunas,barras,pizza,rosca,tabela"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Cultura por munic&iacute;pio</h2>
+          <p class="sub">Hectares de cada cultura nos munic&iacute;pios da sele&ccedil;&atilde;o.</p>
+        </div></div>
+        <div id="tCultMun"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ====================================================== ABA: MUNICÍPIO -->
+  <div class="aba-conteudo" data-aba="municipio">
+    <section class="kpis" id="kpisMun" aria-label="Indicadores por munic&iacute;pio"></section>
+    <div class="painel-grid">
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Hectares mecanizados</h2>
+          <p class="sub">Soma do campo <em>Total mecanizado</em>.</p>
+        </div></div>
+        <div id="gMunHa2" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="ha" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Horas de m&aacute;quina</h2>
+          <p class="sub">Horas registradas nos servi&ccedil;os de a&ccedil;udagem.</p>
+        </div></div>
+        <div id="gMunHrs2" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="h" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tanques e a&ccedil;udes</h2>
+          <p class="sub">Quantidade por munic&iacute;pio.</p>
+        </div></div>
+        <div id="gMunAc2" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Produtores atendidos</h2>
+          <p class="sub">CPFs distintos em cada munic&iacute;pio.</p>
+        </div></div>
+        <div id="gMunProd" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Resumo por munic&iacute;pio</h2>
+          <p class="sub">Todos os indicadores lado a lado, na sele&ccedil;&atilde;o atual.</p>
+        </div></div>
+        <div id="tMun"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- =============================================== ABA: ESCRITÓRIO LOCAL -->
+  <div class="aba-conteudo" data-aba="escritorio">
+    <div class="painel-grid">
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por escrit&oacute;rio</h2>
+          <p class="sub">N&uacute;mero de vistorias registradas.</p>
+        </div></div>
+        <div id="gEsc" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="esc"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Hectares por escrit&oacute;rio</h2>
+          <p class="sub">&Aacute;rea mecanizada atribu&iacute;da a cada escrit&oacute;rio.</p>
+        </div></div>
+        <div id="gEscHa" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="esc" data-unidade="ha" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Horas por escrit&oacute;rio</h2>
+          <p class="sub">Servi&ccedil;os de a&ccedil;udagem.</p>
+        </div></div>
+        <div id="gEscHrs" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="esc" data-unidade="h" data-dec="1"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por respons&aacute;vel t&eacute;cnico</h2>
+          <p class="sub">Vistorias por t&eacute;cnico. Clique para filtrar.</p>
+        </div></div>
+        <div id="gTec" data-tipos="barras,colunas,tabela" data-clique="tec"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Resumo por escrit&oacute;rio local</h2>
+        </div></div>
+        <div id="tEsc"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- =================================================== ABA: BENEFICIÁRIO -->
+  <div class="aba-conteudo" data-aba="beneficiario">
+    <div class="painel-grid">
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Ficha do produtor</h2>
+          <p class="sub">Selecione um produtor para ver o hist&oacute;rico dele na sele&ccedil;&atilde;o atual.</p>
+        </div></div>
+        <div class="tabela-cab">
+          <select class="busca" id="selProd" aria-label="Produtor"></select>
+        </div>
+        <div id="fichaProd"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Sexo do produtor</h2>
+          <p class="sub">Perfil dos produtores atendidos.</p>
+        </div></div>
+        <div id="gSexo" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Declara&ccedil;&atilde;o de Aptid&atilde;o ao Pronaf (DAP)</h2>
+          <p class="sub">Situa&ccedil;&atilde;o da DAP informada na vistoria.</p>
+        </div></div>
+        <div id="gDap" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Estado civil</h2>
+          <p class="sub">Conforme declarado no formul&aacute;rio.</p>
+        </div></div>
+        <div id="gCivil" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Associa&ccedil;&otilde;es e cooperativas</h2>
+          <p class="sub">Organiza&ccedil;&otilde;es mais frequentes entre os atendidos.</p>
+        </div></div>
+        <div id="gAssoc" data-tipos="barras,colunas,tabela"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ====================================================== ABA: REGISTROS -->
+  <div class="aba-conteudo" data-aba="registros">
+    <div class="painel-grid">
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Registros detalhados</h2>
+          <p class="sub">Mesma sele&ccedil;&atilde;o das demais abas. Busque por produtor, munic&iacute;pio, propriedade, t&eacute;cnico ou cultura.</p>
+        </div></div>
+        <div class="tabela-cab">
+          <input type="search" class="busca" id="busca" placeholder="Buscar nos registros filtrados&hellip;" aria-label="Buscar nos registros">
+        </div>
+        <div class="tabela-scroll">
+          <table class="dados registros">
+            <thead>
+              <tr>
+                <th>Inser&ccedil;&atilde;o</th>
+                <th>Vistoria</th>
+                <th>Servi&ccedil;o</th>
+                <th>Produtor / propriedade</th>
+                <th>Munic&iacute;pio / escrit&oacute;rio</th>
+                <th>Culturas</th>
+                <th>&Aacute;rea (ha)</th>
+                <th>Horas</th>
+                <th>Tanques</th>
+                <th>M&aacute;quina / implemento</th>
+                <th>DAE</th>
+                <th>Formul&aacute;rio</th>
+              </tr>
+            </thead>
+            <tbody id="tCorpo"></tbody>
+          </table>
+        </div>
+        <div class="paginacao">
+          <button id="pagAnt" type="button">&larr; Anterior</button>
+          <span id="pagInfo"></span>
+          <button id="pagProx" type="button">Pr&oacute;xima &rarr;</button>
+        </div>
+      </section>
+    </div>
+    <p class="nota" id="nota"></p>
+  </div>
+
+  <!-- ======================================== ABA: ATUALIZAR DADOS (admin) -->
+  <div class="aba-conteudo" data-aba="admin">
+    <div class="painel-grid">
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Carregar planilha atualizada</h2>
+          <p class="sub">Envie o <code>.xlsx</code> do formul&aacute;rio de mecaniza&ccedil;&atilde;o com as linhas novas.
+             A leitura acontece no seu navegador; s&oacute; os dados j&aacute; tratados v&atilde;o para o servidor.</p>
+        </div></div>
+
+        <div class="upload" id="upZona">
+          <input type="file" id="upArquivo" accept=".xlsx" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p class="upload-tit">Arraste a planilha aqui ou clique para escolher</p>
+          <p class="upload-sub">Somente a aba <b>dados</b> &eacute; lida. A estrutura de colunas deve ser a mesma.</p>
+        </div>
+
+        <div id="upStatus"></div>
+        <div id="upResumo"></div>
+        <div class="upload-acoes" id="upAcoes" hidden>
+          <button class="btn btn-verde" id="upAplicar" type="button">Publicar para todos</button>
+          <button class="btn" id="upSoLocal" type="button">Usar s&oacute; neste navegador</button>
+          <button class="btn" id="upCancelar" type="button">Cancelar</button>
+        </div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Situa&ccedil;&atilde;o dos dados</h2>
+          <p class="sub">De onde o painel est&aacute; lendo agora.</p>
+        </div></div>
+        <div id="upFonte"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Como funciona</h2>
+        </div></div>
+        <div class="ajuda">
+          <ol>
+            <li>Exporte a planilha do formul&aacute;rio mantendo a aba <b>dados</b> e as mesmas colunas &mdash; s&oacute; acrescente linhas.</li>
+            <li>Envie o arquivo aqui. O painel compara com os dados atuais e mostra quantos registros entraram.</li>
+            <li><b>Publicar para todos</b> grava <code>data/mecanizacao.json</code> no servidor (precisa do PHP ativo, como no XAMPP)
+                e todo mundo passa a ver os dados novos. A vers&atilde;o anterior fica guardada em
+                <code>data/mecanizacao-anterior.json</code>.</li>
+            <li><b>Usar s&oacute; neste navegador</b> guarda no seu navegador, sem tocar no servidor &mdash; serve para conferir antes de publicar.</li>
+          </ol>
+          <p class="ajuda-aviso"><b>Aten&ccedil;&atilde;o:</b> a data usada em todos os indicadores e gr&aacute;ficos &eacute; a de
+             <b>inser&ccedil;&atilde;o</b> (coluna <em>Carimbo de data/hora</em>). A <em>Data da Vistoria</em> aparece apenas na
+             listagem de registros.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+</div>
+
+<footer>Secretaria de Estado de Agricultura &ndash; SEAGRI / Acre &middot; P&aacute;gina de apoio interno</footer>
+
+<div class="admin-overlay" id="admOverlay">
+  <div class="admin-box">
+    <div class="admin-box-title">&#128274; Acesso administrativo</div>
+    <p class="admin-box-desc">Digite a senha para liberar a aba de atualiza&ccedil;&atilde;o dos dados.</p>
+    <input type="password" id="admSenha" class="admin-pwd" placeholder="Senha" autocomplete="current-password">
+    <p class="admin-errmsg" id="admErro"></p>
+    <div class="admin-btns">
+      <button class="btn btn-verde" id="admOk" type="button">Entrar</button>
+      <button class="btn" id="admCancelar" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/dados-mecanizacao.js"></script>
+<script src="../js/graficos.js"></script>
+<script src="../js/importar.js"></script>
+<script src="../js/dashboard.js"></script>
+</body>
+</html>
