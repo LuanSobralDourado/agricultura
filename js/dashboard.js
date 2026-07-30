@@ -1,8 +1,13 @@
 /* Painel da Mecanização — SEAGRI
-   Fonte dos dados, na ordem em que é tentada:
+   Fonte dos dados do ANO CORRENTE, na ordem em que é tentada:
      1. data/mecanizacao.json  — publicado pelo admin na aba "Atualizar dados"
      2. localStorage           — carga de teste feita só neste navegador
      3. js/dados-mecanizacao.js— arquivo embutido, gerado por tools/gerar_dados_mecanizacao.py
+
+   Os exercícios ENCERRADOS (2023–2025) vêm sempre de
+   js/dados-mecanizacao-historico.js, gerado por tools/gerar_historico_mecanizacao.py.
+   Ficam num arquivo à parte de propósito: são dados fechados, que não mudam,
+   e assim publicar uma planilha nova do ano corrente não apaga o histórico.
 
    Regras do painel:
    - a data de referência de TODOS os filtros, contadores e gráficos é a de
@@ -10,7 +15,9 @@
      listagem de registros, porque tem digitação errada e serviços de anos antigos;
    - mecanização se mede em hectares; açudagem, em horas de máquina e nº de tanques;
    - todo gráfico aceita mais de um tipo de visualização, coerente com o dado;
-   - clicar numa marca filtra e leva para a aba correspondente. */
+   - clicar numa marca filtra e leva para a aba correspondente;
+   - o filtro "Período" (2026…2023, Geral) escolhe o recorte de ano; todas as
+     abas de seção têm a mesma estrutura em qualquer período. */
 (function () {
   'use strict';
 
@@ -21,8 +28,15 @@
   var HASH_ADMIN = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
   var CHAVE_LOCAL = 'seagri_mecanizacao';
 
-  var TODOS = [], META = {}, FONTE = '', ANOS = [], ANO = '';
+  var CONSOLIDADO = 'todos';
+
+  var TODOS = [], META = {}, META_HIST = {}, FONTE = '', ANOS = [];
+  var N_CORRENTE = 0;   // registros vindos da planilha do ano corrente (sem o histórico)
   var ORDEM = { tipo: [MEC, ACU], sistema: [] };
+
+  /** Exercício do registro: o histórico traz o ano fechado da planilha (ex),
+      o ano corrente usa o ano da data de inserção. */
+  function anoDe(r) { return r.ex || r.d.slice(0, 4); }
 
   /* -------------------------------------------------------------- utilidades */
   function el(id) { return document.getElementById(id); }
@@ -136,33 +150,29 @@
       valores.map(function (v) { return '<option value="' + G.esc(v) + '">' + G.esc(v) + '</option>'; }).join('');
   }
 
+  /** Os filtros listam só o que existe DENTRO do exercício escolhido — num ano
+      antigo não faz sentido oferecer município ou técnico que só aparece em 2026. */
   function popularFiltros() {
-    ANOS = unicos(TODOS.map(function (r) { return r.d.slice(0, 4); })).reverse();
-    ANO = ANOS[0] || String(new Date().getFullYear());
-    // o filtro de ano só aparece quando a base tem mais de um exercício
-    el('filtroAno').hidden = ANOS.length <= 1;
-    preencher('fAno', ANOS, 'Todos os anos');
-    F.ano = ANOS.length <= 1 ? '' : F.ano;
+    var D = TODOS.filter(function (r) { return !F.ano || anoDe(r) === F.ano; });
 
-    var meses = Array.from(new Set(TODOS
-      .filter(function (r) { return !F.ano || r.d.slice(0, 4) === F.ano; })
-      .map(function (r) { return r.d.slice(5, 7); }))).sort();
+    var meses = Array.from(new Set(D.map(function (r) { return r.d.slice(5, 7); }))).sort();
     el('fMes').innerHTML = '<option value="">Todos os meses</option>' + meses.map(function (m) {
       return '<option value="' + m + '">' + MESES[+m - 1].charAt(0).toUpperCase() + MESES[+m - 1].slice(1) + '</option>';
     }).join('');
 
-    preencher('fPonto', unicos(TODOS.map(function (r) { return r.pc; })), 'Todos os serviços');
-    preencher('fMun', unicos(TODOS.map(function (r) { return r.mun; })), 'Todos os municípios');
-    preencher('fEsc', unicos(TODOS.map(function (r) { return r.esc; })), 'Todos os escritórios');
-    preencher('fTec', unicos(TODOS.map(function (r) { return r.rt; })), 'Todos os técnicos');
+    preencher('fPonto', unicos(D.map(function (r) { return r.pc; })), 'Todos os serviços');
+    preencher('fMun', unicos(D.map(function (r) { return r.mun; })), 'Todos os municípios');
+    preencher('fEsc', unicos(D.map(function (r) { return r.esc; })), 'Todos os escritórios');
+    preencher('fTec', unicos(D.map(function (r) { return r.rt; })), 'Todos os técnicos');
     var culturas = [];
-    TODOS.forEach(function (r) { r.cult.forEach(function (c) { culturas.push(c[0]); }); });
+    D.forEach(function (r) { r.cult.forEach(function (c) { culturas.push(c[0]); }); });
     preencher('fCult', unicos(culturas), 'Todas as culturas');
     sincronizarFiltros();
   }
 
   function ligarFiltros() {
-    ['fAno|ano', 'fMes|mes', 'fPonto|pc', 'fMun|mun', 'fEsc|esc', 'fCult|cult', 'fTec|tec'].forEach(function (par) {
+    el('fExercicio').addEventListener('change', function () { selecionarAno(this.value); });
+    ['fMes|mes', 'fPonto|pc', 'fMun|mun', 'fEsc|esc', 'fCult|cult', 'fTec|tec'].forEach(function (par) {
       var p = par.split('|');
       el(p[0]).addEventListener('change', function () {
         F[p[1]] = this.value;
@@ -171,7 +181,8 @@
       });
     });
     el('btnLimpar').addEventListener('click', function () {
-      F = { ano: '', mes: '', pc: '', mun: '', esc: '', cult: '', tec: '' };
+      // o exercício não é um filtro comum: continua sendo o da aba escolhida
+      F = { ano: F.ano, mes: '', pc: '', mun: '', esc: '', cult: '', tec: '' };
       sincronizarFiltros();
       el('busca').value = '';
       pag = 1;
@@ -180,14 +191,14 @@
   }
 
   function sincronizarFiltros() {
-    el('fAno').value = F.ano; el('fMes').value = F.mes; el('fPonto').value = F.pc;
+    el('fMes').value = F.mes; el('fPonto').value = F.pc;
     el('fMun').value = F.mun; el('fEsc').value = F.esc; el('fCult').value = F.cult;
     el('fTec').value = F.tec;
   }
 
   function filtrar() {
     return TODOS.filter(function (r) {
-      if (F.ano && r.d.slice(0, 4) !== F.ano) return false;
+      if (F.ano && anoDe(r) !== F.ano) return false;
       if (F.mes && r.d.slice(5, 7) !== F.mes) return false;
       if (F.pc && r.pc !== F.pc) return false;
       if (F.mun && r.mun !== F.mun) return false;
@@ -196,6 +207,59 @@
       if (F.cult && !r.cult.some(function (c) { return c[0] === F.cult; })) return false;
       return true;
     });
+  }
+
+  /* ----------------------------------------------------- seletor de período */
+  /** Uma opção por ano encontrado na base, mais o "Geral". Trocar de período
+      não muda a estrutura do painel: as mesmas abas de seção e os mesmos
+      gráficos são redesenhados com o recorte do ano escolhido. */
+  function montarSeletorAno() {
+    var caixa = el('filtroExercicio'), sel = el('fExercicio');
+    if (!caixa || !sel) return;
+    // ANOS já vem do mais recente para o mais antigo; "Geral" fecha a lista
+    caixa.hidden = ANOS.length <= 1;
+    sel.innerHTML = ANOS.map(function (a) {
+      return '<option value="' + G.esc(a) + '">' + G.esc(a) + '</option>';
+    }).join('') + (ANOS.length > 1
+      ? '<option value="' + CONSOLIDADO + '">Geral</option>'
+      : '');
+  }
+
+  /** Período coberto pela seleção, para títulos e legendas. */
+  function rotuloAno() {
+    if (F.ano) return F.ano;
+    var anos = ANOS.slice().sort();
+    return anos.length ? anos[0] + ' a ' + anos[anos.length - 1] : '';
+  }
+
+  function sincronizarAno() {
+    var sel = el('fExercicio');
+    if (sel) sel.value = F.ano || CONSOLIDADO;
+    var tit = el('tituloPainel');
+    if (tit) {
+      tit.innerHTML = 'Painel da Mecaniza&ccedil;&atilde;o &mdash; ' +
+        (F.ano ? F.ano : 'Geral (' + rotuloAno() + ')');
+    }
+  }
+
+  /** Troca o período. Os demais filtros são zerados porque foram escolhidos
+      dentro de outro ano — manter "Cultura = Café" ao pular para 2023 esconde
+      dados sem o usuário perceber.
+      A escolha vale só para a visita: recarregar volta ao ano corrente. */
+  function selecionarAno(valor) {
+    var novo = (valor === CONSOLIDADO) ? '' : valor;
+    if (novo === F.ano) return;
+    F = { ano: novo, mes: '', pc: '', mun: '', esc: '', cult: '', tec: '' };
+    if (el('busca')) el('busca').value = '';
+    pag = 1;
+    popularFiltros();
+    sincronizarAno();
+    render();
+  }
+
+  /** O painel sempre abre no ano corrente — o mais recente da base. */
+  function anoInicial() {
+    return ANOS[0] || '';   // ANOS vem do mais recente para o mais antigo
   }
 
   /* ------------------------------- registro de painéis e tipos de gráfico */
@@ -218,9 +282,14 @@
     document.querySelectorAll('[data-tipos]').forEach(function (div) {
       var id = div.id;
       var tipos = div.getAttribute('data-tipos').split(',');
-      var salvo = null;
-      try { salvo = localStorage.getItem('seagri_tipo_' + id); } catch (e) { /* modo privado */ }
-      TIPOS[id] = tipos.indexOf(salvo) >= 0 ? salvo : tipos[0];
+      // a tabela é a visão padrão de todo painel: encabeça os botões e é o que
+      // aparece ao abrir a página. Trocar de tipo vale só para a visita atual.
+      var iTab = tipos.indexOf('tabela');
+      if (iTab > 0) {
+        tipos.splice(iTab, 1);
+        tipos.unshift('tabela');
+      }
+      TIPOS[id] = tipos[0];
 
       var cab = div.closest('.painel').querySelector('.painel-cab');
       var acoes = document.createElement('div');
@@ -243,7 +312,6 @@
         var t = btn.getAttribute('data-tipo');
         if (t === TIPOS[id]) return;
         TIPOS[id] = t;
-        try { localStorage.setItem('seagri_tipo_' + id, t); } catch (e) { /* modo privado */ }
         grupo.querySelectorAll('.tipo-btn').forEach(function (b) {
           var on = b === btn;
           b.classList.toggle('ativo', on);
@@ -273,6 +341,8 @@
     return function (rot) {
       if (rot === 'Outros') return;
       if (campo === 'mes') {
+        // no consolidado o eixo do tempo é o ano: clicar abre aquele exercício
+        if (porAno()) return selecionarAno(rot);
         var m = rotParaMes(rot);
         F.mes = (F.mes === m) ? '' : m;
       } else if (campo === 'pc') {
@@ -319,20 +389,50 @@
     else G.serie(TIPOS[id], el(id), p.rotulos, p.series, p.opts);
   }
 
+  /* ------------------------------------------------------- altura útil da tela */
+  /** Altura que sobra abaixo da barra de abas (que é fixa no topo). Vira a
+      variável CSS --alt-util, usada pelos contadores da visão geral e pela
+      coluna de filtros — as duas terminam na mesma linha e cabem sem rolagem. */
+  function ajustarAlturaUtil() {
+    var wrap = document.querySelector('.wrap');
+    if (!wrap) return;
+    // distância do topo do documento até o começo do conteúdo (cabeçalho +
+    // barra de abas + respiro). Medida com scroll no topo, que é o pior caso:
+    // é ali que o cabeçalho ainda ocupa espaço.
+    var pad = parseFloat(getComputedStyle(wrap).paddingTop) || 0;
+    var topo = wrap.getBoundingClientRect().top + window.scrollY + pad;
+    var h = window.innerHeight - topo - 16;
+    document.documentElement.style.setProperty('--alt-util', Math.max(340, Math.round(h)) + 'px');
+  }
+
   /* ------------------------------------------------------------- stat tiles */
-  // itens com { _sec: 'Título' } viram cabeçalhos de seção (grid-column:1/-1).
+  /* itens com { _sec: 'Título' } abrem uma seção. Cada seção vira um bloco
+     (cabeçalho + grade de cartões) em vez de tudo numa grade só: assim a área
+     de contadores consegue dividir a altura disponível entre as seções e
+     caber na tela sem rolagem. */
+  function cartaoKpi(i) {
+    var tag = i.ir ? 'button' : 'div';
+    return '<' + tag + ' class="kpi ' + (i.cls || '') + '"' +
+      (i.ir ? ' type="button" data-ir="' + i.ir + '" title="Ver detalhes"' : '') + '>' +
+      '<div class="kpi-rot">' + i.rot + '</div>' +
+      '<div class="kpi-val">' + i.val + (i.un ? '<span class="kpi-un">' + i.un + '</span>' : '') + '</div>' +
+      '<div class="kpi-sub">' + (i.sub || '') + '</div></' + tag + '>';
+  }
+
   function tiles(alvo, itens) {
     if (!el(alvo)) return;
-    el(alvo).innerHTML = itens.map(function (i) {
-      if (i._sec) {
-        return '<div class="kpis-sec"><span>' + G.esc(i._sec) + '</span></div>';
+    var grupos = [], atual = null;
+    itens.forEach(function (i) {
+      if (i._sec || !atual) {
+        atual = { sec: i._sec || '', cards: [] };
+        grupos.push(atual);
       }
-      var tag = i.ir ? 'button' : 'div';
-      return '<' + tag + ' class="kpi ' + (i.cls || '') + '"' +
-        (i.ir ? ' type="button" data-ir="' + i.ir + '" title="Ver detalhes"' : '') + '>' +
-        '<div class="kpi-rot">' + i.rot + '</div>' +
-        '<div class="kpi-val">' + i.val + (i.un ? '<span class="kpi-un">' + i.un + '</span>' : '') + '</div>' +
-        '<div class="kpi-sub">' + (i.sub || '') + '</div></' + tag + '>';
+      if (!i._sec) atual.cards.push(i);
+    });
+    el(alvo).innerHTML = grupos.map(function (g) {
+      return '<div class="kpis-grupo">' +
+        (g.sec ? '<div class="kpis-sec"><span>' + G.esc(g.sec) + '</span></div>' : '') +
+        '<div class="kpis-linha">' + g.cards.map(cartaoKpi).join('') + '</div></div>';
     }).join('');
     el(alvo).querySelectorAll('.kpi[data-ir]').forEach(function (b) {
       b.addEventListener('click', function () { abrirAba(b.getAttribute('data-ir')); });
@@ -340,36 +440,81 @@
   }
 
   /* ------------------------------------------------------- séries temporais */
-  /** Eixo do tempo: só os meses que têm registro na seleção — mês sem dado
-      não entra no gráfico (evita a série cair para zero sem significado). */
-  function chavesMeses(D) {
-    return Array.from(new Set(D.map(function (r) { return r.d.slice(0, 7); }))).sort();
+  /** Eixo do tempo. Dentro de um exercício a unidade é o MÊS; no consolidado é
+      o ANO — 46 colunas de mês lado a lado não se leem, e o que interessa ali
+      é comparar um exercício com o outro.
+      Só entram períodos com registro na seleção: período sem dado não vira
+      coluna zerada (a queda a zero não significaria nada). */
+  function porAno() { return !F.ano; }
+
+  function chaveTempo(r) { return porAno() ? anoDe(r) : r.d.slice(0, 7); }
+
+  function chavesTempo(D) {
+    return Array.from(new Set(D.map(chaveTempo))).sort();
+  }
+
+  function rotTempo(k) { return porAno() ? k : mesRot(k); }
+  function tituloTempo() { return porAno() ? 'ano' : 'm&ecirc;s'; }
+  function colunaTempo() { return porAno() ? 'Ano' : 'M&ecirc;s'; }
+
+  /* Os títulos dos painéis de série falam em "mês"; no consolidado o eixo é o
+     exercício, então o texto acompanha — senão o gráfico contradiz o título. */
+  var TITULO_SERIE = {
+    gSerie: ['Atendimentos por m&ecirc;s de inser&ccedil;&atilde;o',
+      'Registros lan&ccedil;ados em cada m&ecirc;s do ano, separados por servi&ccedil;o. Clique num m&ecirc;s para filtrar.',
+      'Atendimentos por ano',
+      'Registros lan&ccedil;ados em cada ano, separados por servi&ccedil;o. Clique num ano para abrir o per&iacute;odo.'],
+    gSerieMec: ['Hectares mecanizados por m&ecirc;s',
+      'Soma da &aacute;rea mecanizada em cada m&ecirc;s de vistoria.',
+      'Hectares mecanizados por ano',
+      'Soma da &aacute;rea mecanizada em cada ano.'],
+    gSerieAcu: ['Horas de m&aacute;quina por m&ecirc;s',
+      'Horas de escavadeira registradas em cada m&ecirc;s de vistoria.',
+      'Horas de m&aacute;quina por ano',
+      'Horas de escavadeira registradas em cada ano.'],
+    gSerieAc: ['Tanques e a&ccedil;udes por m&ecirc;s',
+      'Quantidade atendida em cada m&ecirc;s.',
+      'Tanques e a&ccedil;udes por ano',
+      'Quantidade atendida em cada ano.']
+  };
+
+  function rotularSeries() {
+    var i = porAno() ? 2 : 0;
+    Object.keys(TITULO_SERIE).forEach(function (id) {
+      var div = el(id);
+      if (!div) return;
+      var cab = div.closest('.painel').querySelector('.painel-cab-tit');
+      if (!cab) return;
+      cab.querySelector('h2').innerHTML = TITULO_SERIE[id][i];
+      var sub = cab.querySelector('.sub');
+      if (sub) sub.innerHTML = TITULO_SERIE[id][i + 1];
+    });
   }
 
   function serieDe(id, D, valor, nomeUnico) {
-    var ks = chavesMeses(D);
+    var ks = chavesTempo(D);
     if (!ks.length) {
       PAYLOAD[id] = null;
       if (el(id)) G.vazio(el(id));
       return;
     }
-    var rot = ks.map(mesRot);
+    var rot = ks.map(function (k) { return porAno() ? k : mesRot(k); });
     // mês sem valor vira null (buraco no gráfico), nunca zero: um mês em que
     // um dos serviços não teve lançamento não deve aparecer como coluna/ponto 0
     var vals = function (m) { return ks.map(function (k) { return m.get(k) || null; }); };
     var series;
     if (nomeUnico) {
-      var m = somarPor(D, function (r) { return r.d.slice(0, 7); }, valor);
+      var m = somarPor(D, chaveTempo, valor);
       series = [{ nome: nomeUnico, slot: nomeUnico === ACU ? 1 : 0, valores: vals(m) }];
     } else {
       // gráfico com as duas séries (ex.: "atendimentos por mês")
       // — mecanização leva o total de ha como detalhe, açudagem leva as horas
       var Dmec = D.filter(function (r) { return r.pc === MEC; });
       var Dacu = D.filter(function (r) { return r.pc === ACU; });
-      var mMec = somarPor(Dmec, function (r) { return r.d.slice(0, 7); }, valor);
-      var mAcu = somarPor(Dacu, function (r) { return r.d.slice(0, 7); }, valor);
-      var dMecHa  = somarPor(Dmec, function (r) { return r.d.slice(0, 7); }, function (r) { return r.ha; });
-      var dAcuHrs = somarPor(Dacu, function (r) { return r.d.slice(0, 7); }, function (r) { return r.hrs; });
+      var mMec = somarPor(Dmec, chaveTempo, valor);
+      var mAcu = somarPor(Dacu, chaveTempo, valor);
+      var dMecHa  = somarPor(Dmec, chaveTempo, function (r) { return r.ha; });
+      var dAcuHrs = somarPor(Dacu, chaveTempo, function (r) { return r.hrs; });
       var totHa  = soma(Dmec, function (r) { return r.ha; });
       var totHrs = soma(Dacu, function (r) { return r.hrs; });
       series = [];
@@ -465,52 +610,148 @@
     return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   }
 
+  /** Nomes que casam com o texto digitado. Sem texto, ninguém casa: a aba só
+      mostra alguém depois que o usuário procura. */
+  function acharProdutores() {
+    var q = chaveBusca(el('buscaProd') ? el('buscaProd').value.trim() : '');
+    if (!q) return [];
+    return NOMES_PROD.filter(function (n) { return chaveBusca(n).indexOf(q) >= 0; });
+  }
+
+  /** O produtor da vez: o que o usuário digitou por extenso (ou escolheu na
+      lista de sugestões) ou, se a busca só deixou um nome de pé, esse nome. */
+  function produtorBuscado() {
+    var lista = acharProdutores();
+    if (!lista.length) return '';
+    var q = chaveBusca(el('buscaProd').value.trim());
+    var exato = lista.filter(function (n) { return chaveBusca(n) === q; });
+    if (exato.length) return exato[0];
+    return lista.length === 1 ? lista[0] : '';
+  }
+
+  /* ------------------------------------------------- autocomplete da busca */
+  /* Lista própria em vez de <datalist>: o menu nativo é inconsistente entre
+     navegadores e não permite destacar o trecho digitado. */
+  var iSugestao = -1, SUGESTOES = [], TETO_SUGESTOES = 40;
+
+  /** Destaca no nome o trecho que casou com a busca. */
+  function realcar(nome, q) {
+    var i = chaveBusca(nome).indexOf(q);
+    if (i < 0) return G.esc(nome);
+    return G.esc(nome.slice(0, i)) + '<b>' + G.esc(nome.slice(i, i + q.length)) +
+      '</b>' + G.esc(nome.slice(i + q.length));
+  }
+
+  function fecharSugestoes() {
+    iSugestao = -1;
+    el('listaProd').hidden = true;
+    el('buscaProd').setAttribute('aria-expanded', 'false');
+  }
+
+  /** Refaz a lista a cada tecla. Só abre com algo digitado e com mais de um
+      candidato: quando sobra um nome só, a ficha dele já está na tela. */
+  function montarSugestoes(abrir) {
+    var q = el('buscaProd').value.trim();
+    SUGESTOES = acharProdutores();
+
+    el('prodContagem').textContent = !q
+      ? G.num(NOMES_PROD.length) + ' produtores no período'
+      : !SUGESTOES.length ? 'Nenhum produtor encontrado'
+        : G.num(SUGESTOES.length) + ' de ' + G.num(NOMES_PROD.length) + ' produtores';
+
+    if (!abrir || !q || SUGESTOES.length < 2) return fecharSugestoes();
+
+    var chave = chaveBusca(q);
+    var mostra = SUGESTOES.slice(0, TETO_SUGESTOES);
+    el('listaProd').innerHTML = mostra.map(function (n, i) {
+      return '<li class="prod-sugestao" role="option" aria-selected="false" data-i="' + i + '">' +
+        realcar(n, chave) + '</li>';
+    }).join('') + (SUGESTOES.length > mostra.length
+      ? '<li class="prod-sugestoes-mais">+' + G.num(SUGESTOES.length - mostra.length) +
+        ' — refine a busca</li>' : '');
+    iSugestao = -1;
+    el('listaProd').hidden = false;
+    el('buscaProd').setAttribute('aria-expanded', 'true');
+  }
+
+  function moverSugestao(passo) {
+    var itens = el('listaProd').querySelectorAll('.prod-sugestao');
+    if (!itens.length) return;
+    iSugestao = (iSugestao + passo + itens.length) % itens.length;
+    itens.forEach(function (li, i) {
+      var on = i === iSugestao;
+      li.classList.toggle('ativa', on);
+      li.setAttribute('aria-selected', on);
+      if (on && li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function escolherSugestao(i) {
+    if (i < 0 || i >= SUGESTOES.length) return;
+    el('buscaProd').value = SUGESTOES[i];
+    fecharSugestoes();
+    montarSugestoes(false);
+    ficha(filtrar());
+  }
+
   function montarSelProd(D) {
     NOMES_PROD = Array.from(new Set(D.map(function (r) { return r.prod; }).filter(Boolean)))
       .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-    var atual = el('selProd').value;
-    filtrarSelProd(atual);
-    if (NOMES_PROD.indexOf(atual) < 0) el('selProd').value = '';
+    montarSugestoes(false);
     ficha(D);
   }
 
-  /** Reconstrói a lista com os nomes que casam com o texto digitado, mantendo
-      a seleção atual quando ela ainda estiver entre os resultados. */
-  function filtrarSelProd(manter) {
-    var q = chaveBusca(el('buscaProd') ? el('buscaProd').value.trim() : '');
-    var lista = !q ? NOMES_PROD : NOMES_PROD.filter(function (n) {
-      return chaveBusca(n).indexOf(q) >= 0;
-    });
-    var rot = !lista.length ? 'Nenhum produtor encontrado'
-      : q ? G.num(lista.length) + ' de ' + G.num(NOMES_PROD.length) + ' produtores'
-          : 'Selecione um produtor (' + G.num(NOMES_PROD.length) + ' na seleção)';
-    el('selProd').innerHTML = '<option value="">' + G.esc(rot) + '</option>' +
-      lista.map(function (n) { return '<option value="' + G.esc(n) + '">' + G.esc(n) + '</option>'; }).join('');
-    el('selProd').disabled = !lista.length;
-    if (manter && lista.indexOf(manter) >= 0) el('selProd').value = manter;
-    // um único resultado: já seleciona, poupa o clique
-    else if (q && lista.length === 1) el('selProd').value = lista[0];
-    return lista;
+  /* ------------------------------------------------ ficha completa do produtor */
+  /* Rótulos dos dados cadastrais — usados cheios e vazios, para a ficha em
+     branco ter exatamente a mesma forma da preenchida. */
+  var FICHA_ROTULOS = ['Produtor', 'Município', 'Escritório local', 'Propriedade',
+    'Endereço / local', 'Sexo', 'Estado civil', 'Associação / coop.', 'DAP', 'Técnico(s)'];
+  var HIST_COLUNAS = ['Inserção', 'Vistoria', 'Serviço', 'Município', 'Culturas / área',
+    'Hectares', 'Horas', 'Tanques', 'Técnico', 'Obs.', 'Form.'];
+
+  function fichaItem(rot, val) {
+    return '<div class="ficha-item"><div class="ficha-rot">' + G.esc(rot) +
+      '</div><div class="ficha-val">' + (val || '—') + '</div></div>';
   }
 
-  /* ------------------------------------------------ ficha completa do produtor */
-  var benGeral = [];   // preenchido em render(); usado quando nenhum produtor está selecionado
-
   function benVazio() {
-    /* Enquanto sem seleção mostra os indicadores gerais da aba */
-    tiles('kpisBen', benGeral.length ? benGeral : [
-      { rot: 'Aguardando dados…', val: '—', sub: '' }
+    /* A aba mostra a ficha inteira desde o começo, só que sem valores: assim
+       dá para ver quais campos existem antes de procurar alguém. */
+    tiles('kpisBen', [
+      { _sec: 'Nenhum produtor selecionado' },
+      { rot: 'Atendimentos', val: '—', sub: 'mecanização + açudagem' },
+      { rot: 'Hectares mecanizados', val: '—', un: 'ha', cls: 'mec', sub: 'média por atendimento' },
+      { rot: 'Horas de máquina', val: '—', un: 'h', cls: 'acu', sub: 'média por atendimento' },
+      { rot: 'Tanques / açudes', val: '—', cls: 'acu', sub: 'construídos ou reformados' },
+      { rot: 'DAE arrecadada', val: '—', cls: 'texto', sub: 'registros com DAE' },
+      { rot: 'Período', val: '—', sub: 'meses com lançamento' }
     ]);
+
+    var q = el('buscaProd').value.trim();
+    var achados = acharProdutores().length;
+    var msg = !q ? 'Digite o nome do produtor acima para preencher a ficha.'
+      : !achados ? 'Nenhum produtor encontrado com esse nome.'
+        : G.num(achados) + ' produtores contêm esse texto — continue digitando ou escolha um na lista.';
+
     el('fichaProd').innerHTML =
-      '<p class="vazio" style="margin-top:24px">' +
-      (el('selProd').disabled
-        ? 'Nenhum produtor encontrado com esse nome.'
-        : 'Digite ou escolha um produtor acima para ver a ficha completa.') +
-      '</p>';
+      '<div class="ben-vazio">' +
+      '<p class="vazio" style="padding:10px 0 16px">' + G.esc(msg) + '</p>' +
+      '<h3 class="ben-sec">Dados cadastrais</h3>' +
+      '<div class="ficha">' + FICHA_ROTULOS.map(function (r) { return fichaItem(r, ''); }).join('') + '</div>' +
+      '<h3 class="ben-sec">Culturas mecanizadas</h3>' +
+      '<div class="ficha">' + fichaItem('Cultura', '') + '</div>' +
+      '<h3 class="ben-sec">Equipamentos utilizados</h3>' +
+      '<div class="ficha">' + fichaItem('Máquina', '') + fichaItem('Implemento', '') + '</div>' +
+      '<h3 class="ben-sec">Histórico de atendimentos</h3>' +
+      '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
+      HIST_COLUNAS.map(function (c) { return '<th>' + G.esc(c) + '</th>'; }).join('') +
+      '</tr></thead><tbody><tr>' +
+      HIST_COLUNAS.map(function () { return '<td>—</td>'; }).join('') +
+      '</tr></tbody></table></div></div>';
   }
 
   function ficha(D) {
-    var nome = el('selProd').value;
+    var nome = produtorBuscado();
     if (!nome) return benVazio();
 
     var R = D.filter(function (r) { return r.prod === nome; });
@@ -553,24 +794,24 @@
         sub: 'meses com lançamento' }
     ]);
 
-    /* Dados cadastrais */
-    var ficha_itens = [
-      ['Produtor',          G.esc(nome)],
-      ['Município',         uniV(function (r) { return r.mun; })],
-      ['Escritório local',  uniV(function (r) { return r.esc; })],
-      ['Propriedade',       uniV(function (r) { return r.propr; })],
-      ['Endereço / local',  uniV(function (r) { return r.loc; })],
-      ['Sexo',              uniV(function (r) { return r.sexo; })],
-      ['Estado civil',      uniV(function (r) { return r.ec; })],
-      ['Associação / coop.',uniV(function (r) { return r.assoc; })],
-      ['DAP',               uniV(function (r) { return r.dap; })],
-      ['Técnico(s)',        uniV(function (r) { return r.rt; })]
+    /* Dados cadastrais — mesma ordem de FICHA_ROTULOS, para a ficha preenchida
+       e a vazia terem exatamente o mesmo desenho */
+    var valores = [
+      G.esc(nome),
+      uniV(function (r) { return r.mun; }),
+      uniV(function (r) { return r.esc; }),
+      uniV(function (r) { return r.propr; }),
+      uniV(function (r) { return r.loc; }),
+      uniV(function (r) { return r.sexo; }),
+      uniV(function (r) { return r.ec; }),
+      uniV(function (r) { return r.assoc; }),
+      uniV(function (r) { return r.dap; }),
+      uniV(function (r) { return r.rt; })
     ];
 
     var secFicha = '<h3 class="ben-sec">Dados cadastrais</h3>' +
-      '<div class="ficha">' + ficha_itens.map(function (i) {
-        return '<div class="ficha-item"><div class="ficha-rot">' + G.esc(i[0]) +
-          '</div><div class="ficha-val">' + (i[1] || '—') + '</div></div>';
+      '<div class="ficha">' + FICHA_ROTULOS.map(function (rot, i) {
+        return fichaItem(rot, valores[i]);
       }).join('') + '</div>';
 
     /* Culturas */
@@ -598,9 +839,7 @@
     /* Tabela de registros */
     var secTabela = '<h3 class="ben-sec">Histórico de atendimentos (' + G.num(R.length) + ')</h3>' +
       '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
-      '<th>Inserção</th><th>Vistoria</th><th>Serviço</th><th>Município</th>' +
-      '<th>Culturas / área</th><th>Hectares</th><th>Horas</th><th>Tanques</th>' +
-      '<th>Técnico</th><th>Obs.</th><th>Form.</th>' +
+      HIST_COLUNAS.map(function (c) { return '<th>' + G.esc(c) + '</th>'; }).join('') +
       '</tr></thead><tbody>' +
       R.map(function (r) {
         return '<tr>' +
@@ -625,13 +864,16 @@
   /* -------------------------------------------------------------- renderizar */
   function render() {
     if (!TODOS.length) return;
+    rotularSeries();
     var D = filtrar();
     var mec = D.filter(function (r) { return r.pc === MEC; });
     var acu = D.filter(function (r) { return r.pc === ACU; });
     var ha = soma(mec, function (r) { return r.ha; });
     var hrs = soma(acu, function (r) { return r.hrs; });
     var nAc = soma(acu, function (r) { return r.ac; });
-    var ativos = Object.keys(F).filter(function (k) { return F[k]; }).length;
+    // o período não conta como filtro: ele é o recorte, não um corte dentro dele
+    var ativos = Object.keys(F).filter(function (k) { return k !== 'ano' && F[k]; }).length;
+    var noAno = TODOS.filter(function (r) { return !F.ano || anoDe(r) === F.ano; }).length;
 
     var areaCult = new Map(), qtdCult = new Map(), sis = new Map(), haCult = 0, nCult = 0;
     D.forEach(function (r) {
@@ -644,8 +886,9 @@
       });
     });
 
-    el('resumo').innerHTML = '<strong>' + G.num(D.length) + '</strong> de ' + G.num(TODOS.length) +
-      ' registros' + (ativos ? ' (' + ativos + ' filtro' + (ativos > 1 ? 's' : '') + ' ativo' + (ativos > 1 ? 's' : '') + ')' : '') +
+    el('resumo').innerHTML = '<strong>' + G.num(D.length) + '</strong> de ' + G.num(noAno) +
+      ' registros ' + (F.ano ? 'em ' + F.ano : 'no geral (' + rotuloAno() + ')') +
+      (ativos ? ' (' + ativos + ' filtro' + (ativos > 1 ? 's' : '') + ' ativo' + (ativos > 1 ? 's' : '') + ')' : '') +
       (D.length ? ' &middot; inseridos de ' + dataBR(D[0].d) + ' a ' + dataBR(D[D.length - 1].d) : '');
 
     // ------------------------------------------- visão geral: contadores
@@ -682,10 +925,6 @@
     var maxHa   = mec.reduce(function (a, r) { return Math.max(a, r.ha); }, 0);
     var maxHrs  = acu.reduce(function (a, r) { return Math.max(a, r.hrs); }, 0);
     var maxAc   = acu.reduce(function (a, r) { return Math.max(a, r.ac); }, 0);
-    var nSexoF  = nMulher;
-    var nSexoM  = D.filter(function (r) { return r.sexo === 'Masculino'; }).length;
-    var nDapSim = D.filter(function (r) { return r.dap === 'Sim'; }).length;
-    var nDapNao = D.filter(function (r) { return r.dap === 'Não' || r.dap === 'Vencida'; }).length;
     var pct = function (n, t) { return t ? (n / t * 100).toFixed(1).replace('.', ',') + '%' : '—'; };
 
     tiles('kpis', [
@@ -747,7 +986,7 @@
       { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', ir: 'registros',
         sub: G.num(D.filter(function (r) { return r.dae > 0; }).length) + ' atendimentos com DAE' },
       { rot: 'Meses com lançamento', val: G.num(nMeses), ir: 'registros',
-        sub: 'em ' + (ANOS[0] || '2026') }
+        sub: 'em ' + rotuloAno() }
     ]);
 
     // ------------------------------------------- visão geral: gráficos
@@ -791,7 +1030,7 @@
       { rot: 'Escritórios envolvidos', val: G.num(new Set(mec.map(function (r) { return r.esc; })).size), cls: 'mec',
         ir: 'escritorio', sub: 'com mecanização' },
       { rot: 'Meses com lançamento', val: G.num(new Set(mec.map(function (r) { return r.d.slice(0, 7); })).size), cls: 'mec',
-        ir: 'registros', sub: 'em ' + (ANOS[0] || '2026') }
+        ir: 'registros', sub: 'em ' + rotuloAno() }
     ]);
     serieDe('gSerieMec', mec, function (r) { return r.ha; }, MEC);
     pintarCat('gMecMun', ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 14));
@@ -822,7 +1061,7 @@
       { rot: 'Maior serviço', val: G.num(maxHrs, 1), un: 'h', cls: 'acu', sub: 'em uma única vistoria' },
       { rot: 'Mais tanques numa vistoria', val: G.num(maxAc), cls: 'acu', sub: 'num único atendimento' },
       { rot: 'Meses com lançamento', val: G.num(new Set(acu.map(function (r) { return r.d.slice(0, 7); })).size), cls: 'acu',
-        ir: 'registros', sub: 'em ' + (ANOS[0] || '2026') },
+        ir: 'registros', sub: 'em ' + rotuloAno() },
 
       { _sec: 'Território e arrecadação' },
       { rot: 'Município com mais horas', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto', ir: 'municipio',
@@ -890,7 +1129,7 @@
       { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
       { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: G.num(nTec) + ' técnicos atuando' },
       { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
-      { rot: 'Meses com lançamento', val: G.num(nMeses), ir: 'registros', sub: 'em ' + (ANOS[0] || '2026') },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), ir: 'registros', sub: 'em ' + rotuloAno() },
 
       { _sec: 'Volume por território' },
       { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
@@ -956,38 +1195,8 @@
     tabelaResumo('tEsc', D, function (r) { return r.esc; }, 'Escritório local');
 
     // -------------------------------------------------------- beneficiário
-    // Estado vazio da aba: enquanto nenhum produtor está escolhido mostramos o
-    // panorama da seleção. Ao escolher um produtor, ficha() troca por
-    // contadores só dele.
-    benGeral = [
-      { _sec: 'Produtores atendidos' },
-      { rot: 'Produtores CPF distintos', val: G.num(produtores(D)), sub: 'CPFs válidos na planilha' },
-      { rot: 'Pares produtor + imóvel', val: G.num(nProd), sub: 'combinações distintas' },
-      { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
-      { rot: 'Atendimentos por produtor', val: G.num(produtores(D) ? D.length / produtores(D) : 0, 1), sub: 'média da seleção' },
-      { rot: 'Municípios de origem', val: G.num(nMun), ir: 'municipio', sub: 'na seleção atual' },
-      { rot: 'Associações e cooperativas', val: G.num(nAssoc), sub: 'organizações citadas' },
-
-      { _sec: 'Perfil dos beneficiários' },
-      { rot: 'Mulheres atendidas', val: G.num(nSexoF), sub: pct(nSexoF, D.length) + ' dos atendimentos' },
-      { rot: 'Homens atendidos', val: G.num(nSexoM), sub: pct(nSexoM, D.length) + ' dos atendimentos' },
-      { rot: 'Sexo não informado', val: G.num(D.length - nSexoF - nSexoM), sub: pct(D.length - nSexoF - nSexoM, D.length) + ' dos atendimentos' },
-      { rot: 'Produtores com DAP', val: G.num(nDapSim), sub: 'DAP declarada como válida' },
-      { rot: 'DAP ausente ou vencida', val: G.num(nDapNao), sub: pct(nDapNao, D.length) + ' dos atendimentos' },
-      { rot: 'DAE arrecadada', val: moeda(dae), cls: 'texto', ir: 'registros', sub: G.num(nComDae) + ' atendimentos com DAE' },
-
-      { _sec: 'Serviços recebidos' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'em favor dos produtores' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'serviços de açudagem' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'construídos ou reformados' },
-      { rot: 'Beneficiários de mecanização', val: G.num(produtores(mec)), cls: 'mec', sub: 'CPFs distintos' },
-      { rot: 'Beneficiários de açudagem', val: G.num(produtores(acu)), cls: 'acu', sub: 'CPFs distintos' },
-      { rot: 'Culturas declaradas', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(nCult) + ' declarações' }
-    ];
-    pintarCat('gSexo', ranking(contar(D, function (r) { return r.sexo; }), 5), { unidade: 'atendimentos', ordem: ['Masculino', 'Feminino', NI], multicor: true });
-    pintarCat('gDap', ranking(contar(D, function (r) { return r.dap; }), 5), { unidade: 'atendimentos', ordem: ['Sim', 'Não', 'Vencida', NI], multicor: true });
-    pintarCat('gCivil', ranking(contar(D, function (r) { return r.ec; }), 8), { cor: 'var(--s3)' });
-    pintarCat('gAssoc', ranking(contar(D.filter(function (r) { return r.assoc !== NI; }), function (r) { return r.assoc; }), 10), { cor: 'var(--s5)' });
+    // A aba é só a consulta por produtor: nada é mostrado até alguém ser
+    // escolhido na busca — ficha() é quem preenche contadores e histórico.
     montarSelProd(D);
 
     // ----------------------------------------------------------- registros
@@ -997,7 +1206,7 @@
       { rot: 'Filtros ativos', val: G.num(ativos), sub: ativos ? 'restringindo a seleção' : 'nenhum filtro aplicado' },
       { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao', sub: pct(mec.length, D.length) + ' do total' },
       { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem', sub: pct(acu.length, D.length) + ' do total' },
-      { rot: 'Meses com lançamento', val: G.num(nMeses), sub: 'em ' + (ANOS[0] || '2026') },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), sub: 'em ' + rotuloAno() },
       { rot: 'Registros por mês', val: G.num(nMeses ? D.length / nMeses : 0, 1), sub: 'média da seleção' },
 
       { _sec: 'Conteúdo dos registros' },
@@ -1027,7 +1236,7 @@
       { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias consolidadas' },
       { rot: 'Produtores atendidos', val: G.num(produtores(D)), ir: 'beneficiario', sub: 'CPFs distintos' },
       { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: G.num(nTec) + ' técnicos atuando' },
-      { rot: 'Meses com lançamento', val: G.num(nMeses), sub: 'em ' + (ANOS[0] || '2026') },
+      { rot: 'Meses com lançamento', val: G.num(nMeses), sub: 'em ' + rotuloAno() },
       { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
 
       { _sec: 'Totais consolidados' },
@@ -1093,8 +1302,9 @@
       '</div><div class="kpi-sub">' + G.esc(sub) + '</div></div>';
   }
 
-  var visRelatorio = 'quadros';
-  try { visRelatorio = localStorage.getItem('dash-relatorio-vis') || 'quadros'; } catch (e) {}
+  /* a lista é a visão padrão do relatório; a grade fica a um clique.
+     Como nos tipos de gráfico, a troca vale só para a visita atual. */
+  var visRelatorio = 'lista';
 
   function aplicarVisRelatorio() {
     var grid = el('relatorioGrid');
@@ -1192,9 +1402,9 @@
 
     var htmlMec = '';
     if (mec.length) {
-      var mesesMec = chavesMeses(mec);
-      var haMap = somarPor(mec, function (r) { return r.d.slice(0, 7); }, function (r) { return r.ha; });
-      var cntMecMap = somarPor(mec, function (r) { return r.d.slice(0, 7); }, function () { return 1; });
+      var mesesMec = chavesTempo(mec);
+      var haMap = somarPor(mec, chaveTempo, function (r) { return r.ha; });
+      var cntMecMap = somarPor(mec, chaveTempo, function () { return 1; });
       htmlMec = '<div class="relatorio-sec">' +
         '<h2 class="relatorio-sec-tit mec">Mecaniza&ccedil;&atilde;o</h2>' +
         '<div class="ficha">' +
@@ -1211,9 +1421,9 @@
           rkMaq.map(function (d) { return '<tr><td>' + G.esc(d.rot) + '</td><td class="num">' + G.num(d.val) + '</td></tr>'; }).join('')) : '') +
         (rkImpl.length ? '<h3>Implementos e servi&ccedil;os</h3>' + tTbl(['Implemento / Servi&ccedil;o', 'Ocorr&ecirc;ncias'],
           rkImpl.map(function (d) { return '<tr><td>' + G.esc(d.rot) + '</td><td class="num">' + G.num(d.val) + '</td></tr>'; }).join('')) : '') +
-        (mesesMec.length ? '<h3>Por m&ecirc;s</h3>' + tTbl(['M&ecirc;s', 'Atendimentos', 'Hectares'],
+        (mesesMec.length ? '<h3>Por ' + tituloTempo() + '</h3>' + tTbl([colunaTempo(), 'Atendimentos', 'Hectares'],
           mesesMec.map(function (k) {
-            return '<tr><td class="forte">' + mesRot(k) + '</td>' +
+            return '<tr><td class="forte">' + rotTempo(k) + '</td>' +
               '<td class="num">' + G.num(cntMecMap.get(k) || 0) + '</td>' +
               '<td class="num">' + G.num(haMap.get(k) || 0, 1) + '</td></tr>';
           }).join('')) : '') +
@@ -1222,10 +1432,10 @@
 
     var htmlAcu = '';
     if (acu.length) {
-      var mesesAcu = chavesMeses(acu);
-      var hrsMap = somarPor(acu, function (r) { return r.d.slice(0, 7); }, function (r) { return r.hrs; });
-      var acMap  = somarPor(acu, function (r) { return r.d.slice(0, 7); }, function (r) { return r.ac; });
-      var cntAcuMap = somarPor(acu, function (r) { return r.d.slice(0, 7); }, function () { return 1; });
+      var mesesAcu = chavesTempo(acu);
+      var hrsMap = somarPor(acu, chaveTempo, function (r) { return r.hrs; });
+      var acMap  = somarPor(acu, chaveTempo, function (r) { return r.ac; });
+      var cntAcuMap = somarPor(acu, chaveTempo, function () { return 1; });
       htmlAcu = '<div class="relatorio-sec">' +
         '<h2 class="relatorio-sec-tit acu">A&ccedil;udagem</h2>' +
         '<div class="ficha">' +
@@ -1234,9 +1444,9 @@
         '<div class="ficha-item"><div class="ficha-rot">Tanques / a&ccedil;udes</div><div class="ficha-val">' + G.num(nAc) + '</div></div>' +
         '<div class="ficha-item"><div class="ficha-rot">Horas/tanque</div><div class="ficha-val">' + (nAc ? G.num(hrs / nAc, 1) : '—') + ' h</div></div>' +
         '</div>' +
-        (mesesAcu.length ? '<h3>Por m&ecirc;s</h3>' + tTbl(['M&ecirc;s', 'Atendimentos', 'Horas', 'Tanques'],
+        (mesesAcu.length ? '<h3>Por ' + tituloTempo() + '</h3>' + tTbl([colunaTempo(), 'Atendimentos', 'Horas', 'Tanques'],
           mesesAcu.map(function (k) {
-            return '<tr><td class="forte">' + mesRot(k) + '</td>' +
+            return '<tr><td class="forte">' + rotTempo(k) + '</td>' +
               '<td class="num">' + G.num(cntAcuMap.get(k) || 0) + '</td>' +
               '<td class="num">' + G.num(hrsMap.get(k) || 0, 1) + '</td>' +
               '<td class="num">' + G.num(acMap.get(k) || 0) + '</td></tr>';
@@ -1247,7 +1457,7 @@
     var html = '<div class="relatorio-doc">' +
       '<div class="relatorio-header">' +
       '<div class="relatorio-header-org">Secretaria de Estado de Agricultura &ndash; SEAGRI/AC</div>' +
-      '<div class="relatorio-header-sub">Relat&oacute;rio de Mecaniza&ccedil;&atilde;o e A&ccedil;udagem &middot; 2026</div>' +
+      '<div class="relatorio-header-sub">Relat&oacute;rio de Mecaniza&ccedil;&atilde;o e A&ccedil;udagem &middot; ' + G.esc(rotuloAno()) + '</div>' +
       '</div>' +
       '<h1 class="relatorio-mun-titulo">' + G.esc(mun) + '</h1>' +
       '<div class="relatorio-kpis">' +
@@ -1358,20 +1568,29 @@
 
   /* ------------------------------------------------------- nota de qualidade */
   function nota() {
-    var q = META.qualidade || {};
+    var q = META.qualidade || {}, qh = META_HIST.qualidade || {};
+    var somar = function (campo) { return (q[campo] || 0) + (qh[campo] || 0); };
     var fora = TODOS.filter(function (r) { return r.dv && r.dv.slice(0, 4) !== r.d.slice(0, 4); }).length;
+    var anosHist = (META_HIST.anos || []).join(', ');
     el('nota').innerHTML =
       '<b>Sobre os dados.</b> Fonte: <code>' + G.esc(META.arquivo || 'planilha de mecanização') +
-      '</code>, aba <code>' + G.esc(META.aba || 'dados') + '</code> — ' + G.num(TODOS.length) +
-      ' registros, importados em ' + G.esc(META.gerado_em || '—') + '.' +
+      '</code>, aba <code>' + G.esc(META.aba || 'dados') + '</code> — ' + G.num(META.registros || 0) +
+      ' registros do ano corrente, importados em ' + G.esc(META.gerado_em || '—') + '.' +
+      (anosHist ? ' Os exercícios encerrados (' + G.esc(anosHist) + ') vêm da aba <code>' +
+        G.esc(META_HIST.aba || 'geral') + '</code> da mesma planilha — ' + G.num(META_HIST.registros || 0) +
+        ' registros que não mudam mais.' : '') +
       ' <b>Todas as datas do painel são a de inserção</b> (coluna <em>Carimbo de data/hora</em>).' +
       '<ul>' +
       '<li>' + G.num(fora) + ' registros foram lançados num ano e têm <em>Data da Vistoria</em> de outro ' +
       '(aparecem destacados na coluna Vistoria da listagem);</li>' +
-      '<li>' + G.num(q.cpf_invalido || 0) + ' registros sem CPF válido — não entram na contagem de produtores distintos;</li>' +
-      '<li>' + G.num(q.sem_geo || 0) + ' registros sem coordenada geográfica utilizável, por isso não há mapa;</li>' +
-      '<li>' + G.num(q.sem_formulario || 0) + ' registros sem link do formulário digitalizado.</li>' +
+      '<li>' + G.num(somar('cpf_invalido')) + ' registros sem CPF válido — não entram na contagem de produtores ' +
+      'distintos; em 2025 a planilha não trouxe a coluna de CPF, então esse indicador fica zerado no ano;</li>' +
+      '<li>' + G.num(somar('sem_geo')) + ' registros sem coordenada geográfica utilizável, por isso não há mapa;</li>' +
+      '<li>' + G.num(somar('sem_formulario')) + ' registros sem link do formulário digitalizado.</li>' +
       '</ul>' +
+      'Nos exercícios de 2024 e 2025 a planilha não registrou a área da primeira cultura; ' +
+      'nesses casos ela recebe o <em>Total mecanizado</em> do atendimento, que é como 2023 e 2026 se comportam ' +
+      'quando há uma única cultura declarada. ' +
       'Campos livres (nome do trator, tipo de implemento) foram padronizados por palavra-chave, ' +
       'e um mesmo atendimento pode contar em mais de uma categoria de máquina ou implemento.';
   }
@@ -1436,13 +1655,18 @@
       navegador: 'Carga local, só neste navegador',
       embutido: 'Arquivo embutido (<code>js/dados-mecanizacao.js</code>)'
     };
+    var per = META.periodo || ['', ''];
     var itens = [
-      ['Origem', rotulos[FONTE] || FONTE],
+      ['Origem (ano corrente)', rotulos[FONTE] || FONTE],
       ['Planilha', G.esc(META.arquivo || '—')],
       ['Importada em', G.esc(META.gerado_em || '—')],
       ['Publicada em', G.esc(META.publicado_em || '—')],
-      ['Registros', G.num(TODOS.length)],
-      ['Período de inserção', TODOS.length ? dataBR(TODOS[0].d) + ' a ' + dataBR(TODOS[TODOS.length - 1].d) : '—']
+      ['Registros do ano corrente', G.num(N_CORRENTE)],
+      ['Período de inserção', per[0] ? dataBR(per[0]) + ' a ' + dataBR(per[1]) : '—'],
+      ['Histórico embutido', META_HIST.registros
+        ? G.num(META_HIST.registros) + ' registros (' + G.esc((META_HIST.anos || []).join(', ')) + ')'
+        : '—'],
+      ['Total no painel', G.num(TODOS.length)]
     ];
     el('upFonte').innerHTML = '<div class="ficha">' + itens.map(function (i) {
       return '<div class="ficha-item"><div class="ficha-rot">' + i[0] + '</div>' +
@@ -1475,7 +1699,8 @@
 
     IMPORTAR.lerPlanilha(arquivo).then(function (pacote) {
       pendente = pacote;
-      var antes = TODOS.length, depois = pacote.registros.length;
+      // a comparação é só com a planilha do ano corrente: o histórico não vem no upload
+      var antes = N_CORRENTE, depois = pacote.registros.length;
       var novos = depois - antes;
       var q = pacote.meta.qualidade || {};
       aviso('upStatus', 'ok', 'Planilha lida com sucesso: <b>' + G.num(depois) +
@@ -1499,15 +1724,32 @@
     });
   }
 
+  /** Registros dos exercícios encerrados. Um ano que também venha no pacote do
+      ano corrente é descartado daqui: quem manda é a planilha recém-publicada. */
+  function historico(pacote) {
+    var h = window.DADOS_MECANIZACAO_HISTORICO;
+    if (!h || !Array.isArray(h.registros)) return [];
+    META_HIST = h.meta || {};
+    var noPacote = new Set(pacote.registros.map(anoDe));
+    return h.registros.filter(function (r) { return !noPacote.has(anoDe(r)); });
+  }
+
   function usarPacote(pacote, fonte) {
-    TODOS = pacote.registros.slice().sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+    TODOS = historico(pacote).concat(pacote.registros)
+      .sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
     META = pacote.meta || {};
+    N_CORRENTE = pacote.registros.length;
     FONTE = fonte;
     var m = new Map();
     TODOS.forEach(function (r) {
       r.cult.forEach(function (c) { if (c[2]) m.set(c[2], (m.get(c[2]) || 0) + 1); });
     });
     ORDEM.sistema = Array.from(m.keys()).sort(function (a, b) { return m.get(b) - m.get(a); });
+
+    ANOS = unicos(TODOS.map(anoDe)).reverse();   // do mais recente para o mais antigo
+    F.ano = anoInicial();
+    montarSeletorAno();
+    sincronizarAno();
     popularFiltros();
   }
 
@@ -1622,6 +1864,7 @@
   botoes.forEach(function (b) {
     b.addEventListener('click', function () { abrirAba(b.getAttribute('data-aba')); });
   });
+  ajustarAlturaUtil();
   pintarBotaoTema();
   el('temaBtn').addEventListener('click', trocarTema);
   montarControles();
@@ -1631,10 +1874,33 @@
   el('busca').addEventListener('input', function () { pag = 1; tabela(filtrar()); });
   el('pagAnt').addEventListener('click', function () { pag--; tabela(filtrar()); });
   el('pagProx').addEventListener('click', function () { pag++; tabela(filtrar()); });
-  el('selProd').addEventListener('change', function () { ficha(filtrar()); });
+  /* busca do produtor: filtra a cada tecla e abre a lista de sugestões */
   el('buscaProd').addEventListener('input', function () {
-    filtrarSelProd(el('selProd').value);
+    montarSugestoes(true);
     ficha(filtrar());
+  });
+  el('buscaProd').addEventListener('focus', function () { montarSugestoes(true); });
+  el('buscaProd').addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (el('listaProd').hidden) montarSugestoes(true);
+      else moverSugestao(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Enter') {
+      if (iSugestao >= 0) { e.preventDefault(); escolherSugestao(iSugestao); }
+      else fecharSugestoes();
+    } else if (e.key === 'Escape') {
+      fecharSugestoes();
+    }
+  });
+  // mousedown (e não click): o blur do campo fecharia a lista antes do clique
+  el('listaProd').addEventListener('mousedown', function (e) {
+    var li = e.target.closest('.prod-sugestao');
+    if (!li) return;
+    e.preventDefault();
+    escolherSugestao(+li.getAttribute('data-i'));
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.prod-busca')) fecharSugestoes();
   });
   el('btnRelatorioFechar').addEventListener('click', function () {
     el('relatorioOverlay').classList.remove('show');
@@ -1654,7 +1920,6 @@
     var btn = e.target.closest('button[data-vis]');
     if (!btn) return;
     visRelatorio = btn.getAttribute('data-vis');
-    try { localStorage.setItem('dash-relatorio-vis', visRelatorio); } catch (err) {}
     aplicarVisRelatorio();
   });
   el('relatorBusca').addEventListener('input', function () {
@@ -1666,7 +1931,11 @@
   });
   window.addEventListener('resize', (function () {
     var t;
-    return function () { clearTimeout(t); t = setTimeout(render, 220); };
+    return function () {
+      ajustarAlturaUtil();
+      clearTimeout(t);
+      t = setTimeout(render, 220);
+    };
   })());
 
   carregarDados().then(function (res) {

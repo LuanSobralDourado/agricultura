@@ -148,6 +148,21 @@
     m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
     return m ? m[0].slice(0, 10) : '';
   }
+  /** Id anônimo e ESTÁVEL do produtor, derivado do CPF (FNV-1a de 32 bits, duas
+      passadas combinadas em 53 bits). Precisa casar com o pid_cpf() de
+      tools/gerar_dados_mecanizacao.py: é o que permite contar produtores
+      distintos somando o ano corrente com os exercícios já encerrados. */
+  function pidCpf(cpf) {
+    function fnv(base) {
+      var h = base;
+      for (var i = 0; i < cpf.length; i++) {
+        h = Math.imul(h ^ cpf.charCodeAt(i), 16777619) >>> 0;
+      }
+      return h;
+    }
+    return fnv(2166136261) * 2097152 + (fnv(2166136269) & 0x1FFFFF);
+  }
+
   function normEscritorio(s) {
     s = txt(s).replace(/^Escrit[óo]rio\s+Local\s+(de|da|do)?\s*/i, '');
     var mapa = { transacrena: 'Transacreana', transacreana: 'Transacreana', brasileia: 'Brasiléia' };
@@ -260,7 +275,7 @@
         qualidade.cpf_invalido++;
         pid = -1;
       } else {
-        if (!(cpf in cpfs)) cpfs[cpf] = nCpf++;
+        if (!(cpf in cpfs)) { cpfs[cpf] = pidCpf(cpf); nCpf++; }
         pid = cpfs[cpf];
       }
 
@@ -286,7 +301,7 @@
       var dapBruto = txt(r[I.dap]);
 
       registros.push({
-        d: data, dv: vistoria,
+        d: data, ex: data.slice(0, 4), dv: vistoria,
         pc: rotulo(r[I.ponto]), mun: rotulo(r[I.municipio]), esc: normEscritorio(r[I.escritorio]),
         rt: normTecnico(r[I.tecnico]),
         prod: ehMaiuscula(prod) ? titulo(prod) : prod,

@@ -69,6 +69,22 @@ def numero(v):
     return 0.0 if re.fullmatch(r"0+(\.0+)?", t) else n
 
 
+def pid_cpf(cpf):
+    """Id anonimo e ESTAVEL do produtor, derivado do CPF (FNV-1a de 32 bits,
+    duas passadas combinadas em 53 bits — cabe num Number do JavaScript).
+
+    Precisa ser estavel porque os dados de 2026 e os anos anteriores sao
+    gerados por scripts diferentes: contar produtores distintos no consolidado
+    so funciona se o mesmo CPF virar o mesmo id nos dois arquivos.
+    O mesmo algoritmo esta em js/importar.js — mexeu aqui, mexa la."""
+    def fnv(base):
+        h = base
+        for ch in cpf:
+            h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
+        return h
+    return fnv(2166136261) * 2097152 + (fnv(2166136269) & 0x1FFFFF)
+
+
 def data_iso(v):
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
@@ -227,7 +243,8 @@ def main():
             qualidade["cpf_invalido"] += 1
             pid = -1
         else:
-            pid = cpfs.setdefault(cpf, len(cpfs))
+            pid = pid_cpf(cpf)
+            cpfs[cpf] = pid
 
         # A data de referencia do painel e a de INSERCAO (Carimbo de data/hora):
         # e a unica confiavel na planilha. A Data da Vistoria vai junto, apenas
@@ -260,6 +277,7 @@ def main():
 
         registros.append({
             "d": data,        # data de insercao (Carimbo de data/hora)
+            "ex": data[:4],   # exercicio (ano) a que o registro pertence
             "dv": vistoria,   # data da vistoria, so para exibicao
             "pc": rotulo(v("ponto")),
             "mun": rotulo(v("municipio")),

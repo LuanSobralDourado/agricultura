@@ -12,9 +12,12 @@
     document.body.appendChild(backdrop);
   }
 
-  // Inject mobile hamburger into header if not present
-  var header = document.querySelector('header');
-  if(header && !header.querySelector('.mobile-menu-btn')){
+  // Inject mobile hamburger into header if not present.
+  // O <header> pode ainda não existir: no painel este script é carregado antes
+  // dele. Nesse caso tenta de novo quando o documento terminar de carregar.
+  function injetarHamburguer(){
+    var header = document.querySelector('header');
+    if(!header || header.querySelector('.mobile-menu-btn')) return;
     var btn = document.createElement('button');
     btn.className = 'mobile-menu-btn';
     btn.setAttribute('aria-label','Abrir menu');
@@ -22,6 +25,10 @@
     header.insertBefore(btn, header.firstChild);
     btn.addEventListener('click', openSidebar);
   }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', injetarHamburguer);
+  }
+  injetarHamburguer();
 
   function isMobile(){ return window.innerWidth <= 768; }
 

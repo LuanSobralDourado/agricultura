@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SEAGRI - Painel da Mecaniza&ccedil;&atilde;o 2026</title>
+<title>SEAGRI - Painel da Mecaniza&ccedil;&atilde;o</title>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <meta name="theme-color" content="#1b5e20">
-<meta property="og:title" content="SEAGRI &ndash; Painel da Mecaniza&ccedil;&atilde;o 2026">
+<meta property="og:title" content="SEAGRI &ndash; Painel da Mecaniza&ccedil;&atilde;o">
 <meta property="og:description" content="Painel de acompanhamento das vistorias de mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem da SEAGRI/AC.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="../assets/brasao.png">
-<link rel="stylesheet" href="../css/base.css">
-<link rel="stylesheet" href="../css/dashboard.css">
+<link rel="stylesheet" href="../css/base.css?v=2026073007">
+<link rel="stylesheet" href="../css/dashboard.css?v=2026073007">
 <script>
   /* aplica o tema antes da pintura para não piscar branco */
   (function () {
@@ -60,7 +60,7 @@
   <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
 </nav>
 <button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
-<script src="../js/sidebar.js"></script>
+<script src="../js/sidebar.js?v=2026073007"></script>
 <script>
 /* no painel a barra lateral começa recolhida — maximiza a área de dados */
 (function(){
@@ -71,7 +71,7 @@
 </script>
 
 <header>
-  <h1>Painel da Mecaniza&ccedil;&atilde;o &mdash; 2026</h1>
+  <h1 id="tituloPainel">Painel da Mecaniza&ccedil;&atilde;o</h1>
   <p>Secretaria de Agricultura do Acre &middot; mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem</p>
   <div class="header-acoes">
     <button class="tema-btn" id="temaBtn" type="button" aria-label="Alternar tema"></button>
@@ -129,9 +129,11 @@
 
   <!-- ------------------------------------------------------------- filtros -->
   <section class="filtros" aria-label="Filtros">
-    <div class="filtro" id="filtroAno" hidden>
-      <label for="fAno">Ano de inser&ccedil;&atilde;o</label>
-      <select id="fAno"></select>
+    <!-- per&iacute;odo: recorte mais amplo do painel, por isso encabe&ccedil;a os filtros.
+         As op&ccedil;&otilde;es s&atilde;o montadas por js/dashboard.js a partir dos anos da base. -->
+    <div class="filtro" id="filtroExercicio" hidden>
+      <label for="fExercicio">Per&iacute;odo</label>
+      <select id="fExercicio"></select>
     </div>
     <div class="filtro">
       <label for="fMes">M&ecirc;s de inser&ccedil;&atilde;o</label>
@@ -207,7 +209,7 @@
       <section class="painel largo">
         <div class="painel-cab"><div class="painel-cab-tit">
           <h2>Atendimentos por m&ecirc;s de inser&ccedil;&atilde;o</h2>
-          <p class="sub">Registros lan&ccedil;ados em cada m&ecirc;s de 2026, separados por servi&ccedil;o. Clique num m&ecirc;s para filtrar.</p>
+          <p class="sub">Registros lan&ccedil;ados em cada m&ecirc;s do exerc&iacute;cio, separados por servi&ccedil;o. Clique num m&ecirc;s para filtrar.</p>
         </div></div>
         <div id="gSerie" data-tipos="colunas,linha,area,tabela" data-ir="registros" data-clique="mes"></div>
       </section>
@@ -473,39 +475,15 @@
           <p class="sub">Selecione um produtor para ver o hist&oacute;rico dele na sele&ccedil;&atilde;o atual.</p>
         </div></div>
         <div class="tabela-cab prod-cab">
-          <input type="search" class="busca" id="buscaProd" autocomplete="off"
-                 placeholder="Digite o nome do produtor&hellip;" aria-label="Buscar produtor">
-          <select class="busca" id="selProd" aria-label="Produtor"></select>
+          <div class="prod-busca">
+            <input type="search" class="busca" id="buscaProd" autocomplete="off"
+                   placeholder="Digite o nome do produtor&hellip;" aria-label="Buscar produtor"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="listaProd">
+            <ul class="prod-sugestoes" id="listaProd" role="listbox" aria-label="Produtores encontrados" hidden></ul>
+          </div>
+          <span class="prod-contagem" id="prodContagem"></span>
         </div>
         <div id="fichaProd"></div>
-      </section>
-      <section class="painel">
-        <div class="painel-cab"><div class="painel-cab-tit">
-          <h2>Sexo do produtor</h2>
-          <p class="sub">Perfil dos produtores atendidos.</p>
-        </div></div>
-        <div id="gSexo" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
-      </section>
-      <section class="painel">
-        <div class="painel-cab"><div class="painel-cab-tit">
-          <h2>Declara&ccedil;&atilde;o de Aptid&atilde;o ao Pronaf (DAP)</h2>
-          <p class="sub">Situa&ccedil;&atilde;o da DAP informada na vistoria.</p>
-        </div></div>
-        <div id="gDap" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
-      </section>
-      <section class="painel">
-        <div class="painel-cab"><div class="painel-cab-tit">
-          <h2>Estado civil</h2>
-          <p class="sub">Conforme declarado no formul&aacute;rio.</p>
-        </div></div>
-        <div id="gCivil" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
-      </section>
-      <section class="painel">
-        <div class="painel-cab"><div class="painel-cab-tit">
-          <h2>Associa&ccedil;&otilde;es e cooperativas</h2>
-          <p class="sub">Organiza&ccedil;&otilde;es mais frequentes entre os atendidos.</p>
-        </div></div>
-        <div id="gAssoc" data-tipos="barras,colunas,tabela"></div>
       </section>
     </div>
   </div>
@@ -558,13 +536,13 @@
     <div class="relatorio-cab">
       <input type="search" class="busca" id="relatorBusca" placeholder="Buscar munic&iacute;pio&hellip;" aria-label="Buscar munic&iacute;pio">
       <div class="relatorio-vis" id="relatorioVis" role="group" aria-label="Modo de visualiza&ccedil;&atilde;o">
-        <button type="button" class="ativa" data-vis="quadros" aria-label="Ver em quadrados">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          Quadrados
-        </button>
-        <button type="button" data-vis="lista" aria-label="Ver em lista">
+        <button type="button" class="ativa" data-vis="lista" aria-label="Ver em lista">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           Lista
+        </button>
+        <button type="button" data-vis="quadros" aria-label="Ver em grade">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Grade
         </button>
       </div>
     </div>
@@ -618,6 +596,9 @@
                 e todo mundo passa a ver os dados novos. A vers&atilde;o anterior fica guardada em
                 <code>data/mecanizacao-anterior.json</code>.</li>
             <li><b>Usar s&oacute; neste navegador</b> guarda no seu navegador, sem tocar no servidor &mdash; serve para conferir antes de publicar.</li>
+            <li>O upload troca <b>apenas o ano corrente</b>. Os exerc&iacute;cios encerrados (2023 a 2025) ficam em
+                <code>js/dados-mecanizacao-historico.js</code> e n&atilde;o s&atilde;o afetados. Para refaz&ecirc;-los,
+                rode <code>python tools/gerar_historico_mecanizacao.py</code>.</li>
           </ol>
           <p class="ajuda-aviso"><b>Aten&ccedil;&atilde;o:</b> a data usada em todos os indicadores e gr&aacute;ficos &eacute; a de
              <b>inser&ccedil;&atilde;o</b> (coluna <em>Carimbo de data/hora</em>). A <em>Data da Vistoria</em> aparece apenas na
@@ -659,9 +640,10 @@
   </div>
 </div>
 
-<script src="../js/dados-mecanizacao.js"></script>
-<script src="../js/graficos.js"></script>
-<script src="../js/importar.js"></script>
-<script src="../js/dashboard.js"></script>
+<script src="../js/dados-mecanizacao-historico.js?v=2026073007"></script>
+<script src="../js/dados-mecanizacao.js?v=2026073007"></script>
+<script src="../js/graficos.js?v=2026073007"></script>
+<script src="../js/importar.js?v=2026073007"></script>
+<script src="../js/dashboard.js?v=2026073007"></script>
 </body>
 </html>
