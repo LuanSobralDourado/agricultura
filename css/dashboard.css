@@ -152,10 +152,11 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
    Só vale com 6 colunas (>=1401px) e tela alta o bastante: abaixo disso cada
    seção quebra em duas linhas e 24 cartões espremidos ficariam ilegíveis. */
 @media(min-width:1401px) and (min-height:700px){
-  /* space-between: o cartão fica com a altura do conteúdo e o espaço que sobra
-     vira respiro entre as seções — nada de cartão esticado de 190px */
+  /* space-around: cada seção fica centrada na sua faixa (folga igual acima e
+     abaixo) em vez de colada no topo com um vão embaixo. O cartão mantém a
+     altura do conteúdo — aqui só se reposiciona. */
   .aba-conteudo[data-aba="geral"] .kpis{height:var(--alt-util,auto);
-    justify-content:space-between;margin-bottom:22px}
+    justify-content:space-around;margin-bottom:22px}
   .filtros{height:var(--alt-util,calc(100vh - 72px))}
 }
 .kpi.mec{border-left-color:var(--mec)}
@@ -311,6 +312,19 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
 
 /* ficha vazia: mesma estrutura da preenchida, só sem valor */
 .ben-vazio .ficha-val,.ben-vazio td,.ben-vazio .kpi-val{color:var(--tinta3);opacity:.55}
+
+/* seções da ficha (o reset do base.css zera o h3, então o estilo vem daqui) */
+.ben-sec{font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--tinta3);margin:20px 0 10px;padding-bottom:6px;
+  border-bottom:1px solid var(--linha-t)}
+.ben-sec:first-child{margin-top:0}
+/* contadores embutidos na ficha: mesmos cartões, sem sombra, para lerem como
+   parte do bloco do produtor e não como um painel separado */
+.kpis-ficha{margin-bottom:18px}
+.kpis-ficha .kpi{box-shadow:none;background:var(--superficie2)}
+.kpis-ficha .kpi-val{font-size:22px}
+.ben-nome{font-size:16px;letter-spacing:.2px;text-transform:none;color:var(--acento);
+  border-bottom-color:var(--acento)}
 .tabela-scroll{overflow-x:auto;border:1px solid var(--linha-t);border-radius:8px;-webkit-overflow-scrolling:touch}
 table.dados{width:100%;border-collapse:collapse;font-size:12.5px}
 table.dados th{background:var(--superficie2);text-align:left;padding:9px 12px;font-size:11px;font-weight:700;

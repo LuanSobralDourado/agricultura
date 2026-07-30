@@ -229,7 +229,7 @@ def main():
     cpfs = {}
     registros = []
     qualidade = {"cpf_invalido": 0, "sem_data_valida": 0, "vistoria_outro_ano": 0,
-                 "sem_geo": 0, "sem_formulario": 0}
+                 "sem_geo": 0, "sem_formulario": 0, "acudes_texto": 0}
 
     i_geox, i_geoy = idx("Geo X"), idx("Geo Y")
 
@@ -274,6 +274,13 @@ def main():
         if not form.startswith("http"):
             form = ""
             qualidade["sem_formulario"] += 1
+
+        # "Quantidade de acudes" as vezes vem como texto ('01', '05'). O painel
+        # converte e conta; o SOMA do Excel ignora essas celulas — dai a
+        # diferenca entre os dois totais. Contamos para poder avisar.
+        bruto_ac = v("acudes")
+        if not isinstance(bruto_ac, (int, float)) and numero(bruto_ac) > 0:
+            qualidade["acudes_texto"] += 1
 
         registros.append({
             "d": data,        # data de insercao (Carimbo de data/hora)

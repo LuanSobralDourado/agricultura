@@ -10,8 +10,8 @@
 <meta property="og:description" content="Painel de acompanhamento das vistorias de mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem da SEAGRI/AC.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="../assets/brasao.png">
-<link rel="stylesheet" href="../css/base.css?v=2026073007">
-<link rel="stylesheet" href="../css/dashboard.css?v=2026073007">
+<link rel="stylesheet" href="../css/base.css?v=2026073017">
+<link rel="stylesheet" href="../css/dashboard.css?v=2026073017">
 <script>
   /* aplica o tema antes da pintura para não piscar branco */
   (function () {
@@ -60,7 +60,7 @@
   <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
 </nav>
 <button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
-<script src="../js/sidebar.js?v=2026073007"></script>
+<script src="../js/sidebar.js?v=2026073017"></script>
 <script>
 /* no painel a barra lateral começa recolhida — maximiza a área de dados */
 (function(){
@@ -136,7 +136,7 @@
       <select id="fExercicio"></select>
     </div>
     <div class="filtro">
-      <label for="fMes">M&ecirc;s de inser&ccedil;&atilde;o</label>
+      <label for="fMes">M&ecirc;s da vistoria</label>
       <select id="fMes"></select>
     </div>
     <div class="filtro">
@@ -209,7 +209,7 @@
       <section class="painel largo">
         <div class="painel-cab"><div class="painel-cab-tit">
           <h2>Atendimentos por m&ecirc;s de inser&ccedil;&atilde;o</h2>
-          <p class="sub">Registros lan&ccedil;ados em cada m&ecirc;s do exerc&iacute;cio, separados por servi&ccedil;o. Clique num m&ecirc;s para filtrar.</p>
+          <p class="sub">Vistorias realizadas em cada m&ecirc;s do exerc&iacute;cio, separadas por servi&ccedil;o. Clique num m&ecirc;s para filtrar.</p>
         </div></div>
         <div id="gSerie" data-tipos="colunas,linha,area,tabela" data-ir="registros" data-clique="mes"></div>
       </section>
@@ -298,7 +298,7 @@
       <section class="painel largo">
         <div class="painel-cab"><div class="painel-cab-tit">
           <h2>Horas de m&aacute;quina por m&ecirc;s</h2>
-          <p class="sub">Horas de escavadeira registradas em cada m&ecirc;s de vistoria.</p>
+          <p class="sub">Horas de escavadeira registradas em cada m&ecirc;s.</p>
         </div></div>
         <div id="gSerieAcu" data-tipos="colunas,linha,area,tabela" data-clique="mes" data-dec="1"></div>
       </section>
@@ -467,12 +467,11 @@
 
   <!-- =================================================== ABA: BENEFICIÁRIO -->
   <div class="aba-conteudo" data-aba="beneficiario">
-    <section class="kpis" id="kpisBen" aria-label="Indicadores dos benefici&aacute;rios"></section>
     <div class="painel-grid">
       <section class="painel largo">
         <div class="painel-cab"><div class="painel-cab-tit">
           <h2>Ficha do produtor</h2>
-          <p class="sub">Selecione um produtor para ver o hist&oacute;rico dele na sele&ccedil;&atilde;o atual.</p>
+          <p class="sub">Busque um produtor para ver os n&uacute;meros e o hist&oacute;rico dele na sele&ccedil;&atilde;o atual.</p>
         </div></div>
         <div class="tabela-cab prod-cab">
           <div class="prod-busca">
@@ -600,9 +599,10 @@
                 <code>js/dados-mecanizacao-historico.js</code> e n&atilde;o s&atilde;o afetados. Para refaz&ecirc;-los,
                 rode <code>python tools/gerar_historico_mecanizacao.py</code>.</li>
           </ol>
-          <p class="ajuda-aviso"><b>Aten&ccedil;&atilde;o:</b> a data usada em todos os indicadores e gr&aacute;ficos &eacute; a de
-             <b>inser&ccedil;&atilde;o</b> (coluna <em>Carimbo de data/hora</em>). A <em>Data da Vistoria</em> aparece apenas na
-             listagem de registros.</p>
+          <p class="ajuda-aviso"><b>Aten&ccedil;&atilde;o:</b> a data usada em todos os indicadores e gr&aacute;ficos &eacute; a
+             <b>Data da Vistoria</b> &mdash; o que vale &eacute; quando o servi&ccedil;o foi feito. Quando essa data &eacute;
+             imposs&iacute;vel (ano digitado errado ou data futura), o registro entra pela data de lan&ccedil;amento e
+             aparece destacado na listagem.</p>
         </div>
       </section>
     </div>
@@ -640,10 +640,10 @@
   </div>
 </div>
 
-<script src="../js/dados-mecanizacao-historico.js?v=2026073007"></script>
-<script src="../js/dados-mecanizacao.js?v=2026073007"></script>
-<script src="../js/graficos.js?v=2026073007"></script>
-<script src="../js/importar.js?v=2026073007"></script>
-<script src="../js/dashboard.js?v=2026073007"></script>
+<script src="../js/dados-mecanizacao-historico.js?v=2026073017"></script>
+<script src="../js/dados-mecanizacao.js?v=2026073017"></script>
+<script src="../js/graficos.js?v=2026073017"></script>
+<script src="../js/importar.js?v=2026073017"></script>
+<script src="../js/dashboard.js?v=2026073017"></script>
 </body>
 </html>

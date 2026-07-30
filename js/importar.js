@@ -266,7 +266,8 @@
     for (var n = 1; n <= 10; n++) DAE.push(idx('Informe o valor da DAE - ' + n));
 
     var cpfs = {}, nCpf = 0, registros = [];
-    var qualidade = { cpf_invalido: 0, sem_data_valida: 0, vistoria_outro_ano: 0, sem_geo: 0, sem_formulario: 0 };
+    var qualidade = { cpf_invalido: 0, sem_data_valida: 0, vistoria_outro_ano: 0,
+      sem_geo: 0, sem_formulario: 0, acudes_texto: 0 };
 
     dados.forEach(function (r) {
       var cpf = txt(r[I.cpf]);
@@ -295,6 +296,9 @@
       DAE.forEach(function (j) { dae += numero(r[j]); });
 
       if (!numero(r[I.geox]) || !numero(r[I.geoy])) qualidade.sem_geo++;
+      // célula de "Quantidade de açudes" digitada como texto ('01'): o painel
+      // converte e conta, mas o SOMA do Excel ignora — vale avisar
+      if (typeof r[I.acudes] !== 'number' && numero(r[I.acudes]) > 0) qualidade.acudes_texto++;
       var form = txt(r[I.formulario]);
       if (form.indexOf('http') !== 0) { form = ''; qualidade.sem_formulario++; }
       var prod = txt(r[I.produtor]);
