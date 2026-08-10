@@ -3,14 +3,26 @@
 // e grava em data/mecanizacao.json, que o painel passa a ler no lugar do
 // arquivo embutido js/dados-mecanizacao.js.
 //
-// A conferencia de senha aqui e o mesmo hash usado nas paginas: serve para
-// evitar gravacao acidental, NAO e autenticacao forte (o hash trafega e pode
-// ser reaproveitado). Se este painel for exposto fora da rede interna, troque
-// por autenticacao de verdade no servidor.
+// A senha e verificada AQUI, no servidor, e o hash nao aparece em nenhum
+// arquivo que o navegador baixe. Antes o mesmo SHA-256 ficava em js/dashboard.js:
+// quem abrisse o painel levava junto o hash e podia quebra-lo offline — SHA-256
+// e rapido, e uma senha curta cai em minutos numa GPU. bcrypt e lento e salgado
+// de proposito, entao mesmo que este arquivo vaze a quebra fica cara.
+//
+// Para trocar a senha, gere um hash novo e substitua a constante abaixo:
+//   php -r 'echo password_hash("NOVA-SENHA", PASSWORD_DEFAULT), PHP_EOL;'
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-const HASH_ADMIN = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
+const HASH_ADMIN = '$2y$10$023QXmJJwoDtbR4ZvyA3juTySoICQQB3sUBjGFJyLW9EUW3gQGBxi';
+
+/** Confere a senha. O atraso freia a tentativa em massa: sem ele da para
+    testar milhares de senhas por minuto contra este endpoint. */
+function senha_confere($senha){
+  $ok = is_string($senha) && password_verify($senha, HASH_ADMIN);
+  if(!$ok) usleep(700000);   // 0,7 s por tentativa errada
+  return $ok;
+}
 
 $destino = __DIR__ . '/data/mecanizacao.json';
 $backup  = __DIR__ . '/data/mecanizacao-anterior.json';
@@ -38,8 +50,14 @@ if(strlen($raw) > 40 * 1024 * 1024) erro(413, 'Arquivo muito grande.');
 $entrada = json_decode($raw, true);
 if(!is_array($entrada)) erro(400, 'Corpo da requisicao nao e JSON valido.');
 
-if(!isset($entrada['senha']) || hash('sha256', (string)$entrada['senha']) !== HASH_ADMIN){
-  erro(403, 'Senha de administrador incorreta.');
+$senha = isset($entrada['senha']) ? $entrada['senha'] : null;
+if(!senha_confere($senha)) erro(403, 'Senha de administrador incorreta.');
+
+// So conferir a senha, sem publicar nada: e o que libera a aba de atualizacao
+// no painel. O navegador nao decide mais sozinho se alguem e administrador.
+if(isset($entrada['acao']) && $entrada['acao'] === 'login'){
+  echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+  exit;
 }
 
 $pacote = isset($entrada['dados']) ? $entrada['dados'] : null;
