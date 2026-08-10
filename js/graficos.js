@@ -46,20 +46,44 @@
 
   /** Liga o clique nas marcas quando quem chama passa opts.aoClicar.
       O container é reaproveitado entre redesenhos, então o ouvinte anterior
-      precisa sair antes — senão um clique dispara N vezes e o filtro alterna. */
+      precisa sair antes — senão um clique dispara N vezes e o filtro alterna.
+
+      Filtrar clicando numa marca é a interação central do painel, e era só de
+      mouse. As marcas marcadas com data-foco viram alvo de Tab, com Enter e
+      Espaço fazendo o mesmo que o clique. Só uma marca por dado recebe foco:
+      as barras, por exemplo, têm três elementos com data-rot (rótulo, pista e
+      valor) e virariam três paradas de Tab para a mesma informação. */
   function clicavel(el, opts) {
     if (el._aoClicar) {
       el.removeEventListener('click', el._aoClicar);
-      el._aoClicar = null;
+      el.removeEventListener('keydown', el._aoTeclar);
+      el._aoClicar = el._aoTeclar = null;
       el.classList.remove('clicavel');
     }
     if (!opts.aoClicar) return;
+
     el._aoClicar = function (ev) {
       var alvo = ev.target.closest('[data-rot]');
       if (alvo) opts.aoClicar(alvo.getAttribute('data-rot'));
     };
+    el._aoTeclar = function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var alvo = ev.target.closest('[data-rot]');
+      if (!alvo) return;
+      ev.preventDefault();               // Espaço não deve rolar a página
+      opts.aoClicar(alvo.getAttribute('data-rot'));
+    };
     el.addEventListener('click', el._aoClicar);
+    el.addEventListener('keydown', el._aoTeclar);
     el.classList.add('clicavel');
+
+    el.querySelectorAll('[data-foco]').forEach(function (m) {
+      m.setAttribute('tabindex', '0');
+      m.setAttribute('role', 'button');
+      if (!m.getAttribute('aria-label')) {
+        m.setAttribute('aria-label', 'Filtrar por ' + m.getAttribute('data-rot'));
+      }
+    });
   }
 
   function corDe(d, i, cores, ordem) {
@@ -85,7 +109,7 @@
       var pct = Math.max(1.5, (d.val / max) * 100);
       var dica = esc(d.rot) + ': ' + num(d.val, opts.dec) + (opts.unidade ? ' ' + esc(opts.unidade) : '');
       var at = ' data-rot="' + esc(d.rot) + '" title="' + dica + '"';
-      html += '<span class="barra-rot"' + at + '>' + esc(d.rot) + '</span>' +
+      html += '<span class="barra-rot" data-foco' + at + '>' + esc(d.rot) + '</span>' +
         '<span class="barra-pista"' + at + '><span class="barra-fill" style="width:' + pct.toFixed(2) +
         '%;background:' + (opts.multicor ? corDe(d, i, cores, opts.ordem) : cor) + '"></span></span>' +
         '<span class="barra-val"' + at + '>' + num(d.val, opts.dec) +
@@ -106,7 +130,7 @@
     dados.forEach(function (d, i) {
       var pct = Math.max(1, (d.val / max) * 100);
       var dica = esc(d.rot) + ': ' + num(d.val, opts.dec) + (opts.unidade ? ' ' + esc(opts.unidade) : '');
-      html += '<div class="col-item" data-rot="' + esc(d.rot) + '" title="' + dica + '">' +
+      html += '<div class="col-item" data-foco data-rot="' + esc(d.rot) + '" title="' + dica + '">' +
         '<span class="col-val">' + num(d.val, opts.dec) + '</span>' +
         '<span class="col-pista"><span class="col-fill" style="height:' + pct.toFixed(2) + '%;background:' +
         (opts.multicor ? corDe(d, i, cores, opts.ordem) : cor) + '"></span></span>' +
@@ -153,7 +177,7 @@
       '</text>' : '';
 
     var leg = '<div class="rosca-legenda">' + dados.map(function (d, i) {
-      return '<span class="rosca-item" data-rot="' + esc(d.rot) + '">' +
+      return '<span class="rosca-item" data-foco data-rot="' + esc(d.rot) + '">' +
         '<span class="legenda-cor" style="background:' + cs[i] + '"></span>' +
         '<span class="rosca-nome">' + esc(d.rot) + '</span><b>' + num(d.val, opts.dec) + ' &middot; ' +
         (d.val / total * 100).toFixed(1).replace('.', ',') + '%</b></span>';
@@ -164,10 +188,13 @@
     clicavel(el, opts);
   }
 
+  /* Cópia rasa em vez de `opts.pizza = true`: quem chama guarda e reaproveita
+     o mesmo objeto de opções entre redesenhos, então marcar a flag no original
+     deixava o painel preso na pizza — voltar para "Rosca" continuava pizza. */
   function pizza(el, dados, opts) {
-    opts = opts || {};
-    opts.pizza = true;
-    rosca(el, dados, opts);
+    var o = Object.assign({}, opts || {});
+    o.pizza = true;
+    rosca(el, dados, o);
   }
 
   /** Tabela simples — é também a "table view" exigida pela paleta de baixo contraste. */
@@ -179,7 +206,7 @@
       '<th>' + esc(opts.rotuloChave || 'Categoria') + '</th><th>' +
       esc(opts.unidade ? 'Valor (' + opts.unidade + ')' : 'Valor') + '</th><th>%</th></tr></thead><tbody>' +
       dados.map(function (d) {
-        return '<tr data-rot="' + esc(d.rot) + '"><td class="forte">' + esc(d.rot) + '</td>' +
+        return '<tr data-foco data-rot="' + esc(d.rot) + '"><td class="forte">' + esc(d.rot) + '</td>' +
           '<td class="num">' + num(d.val, opts.dec) + '</td>' +
           '<td class="num">' + (total ? (d.val / total * 100).toFixed(1).replace('.', ',') : '0') + '%</td></tr>';
       }).join('') +
@@ -272,10 +299,12 @@
       });
     }
 
-    g += '<line class="g-cursor" id="gcursor" y1="' + mt + '" y2="' + (mt + ph) + '"/>';
+    // classe, não id: há mais de um gráfico de série na mesma aba (açudagem tem
+    // dois) e ids repetidos deixam o documento inválido
+    g += '<line class="g-cursor" y1="' + mt + '" y2="' + (mt + ph) + '"/>';
     var lg = pw / Math.max(1, n - 1);
     rotulos.forEach(function (rr, i) {
-      g += '<rect class="g-hit" data-i="' + i + '" data-rot="' + esc(rr) + '" x="' +
+      g += '<rect class="g-hit" data-foco data-i="' + i + '" data-rot="' + esc(rr) + '" x="' +
         (x(i) - lg / 2).toFixed(1) + '" y="' + mt + '" width="' + lg.toFixed(1) + '" height="' + ph + '"/>';
     });
 
@@ -293,11 +322,11 @@
 
     el.innerHTML = leg + '<div class="serie-box"><svg viewBox="0 0 ' + W + ' ' + H +
       '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + esc(opts.titulo || 'Série temporal') +
-      '">' + g + '</svg><div class="tooltip" id="gtip"></div></div>';
+      '">' + g + '</svg><div class="tooltip"></div></div>';
 
     var box = el.querySelector('.serie-box');
-    var tip = box.querySelector('#gtip');
-    var cursor = box.querySelector('#gcursor');
+    var tip = box.querySelector('.tooltip');
+    var cursor = box.querySelector('.g-cursor');
     box.querySelectorAll('.g-hit').forEach(function (hit) {
       hit.addEventListener('mouseenter', function () {
         var i = +hit.getAttribute('data-i');
@@ -346,7 +375,7 @@
       (series.length > 1 ? '<th>Total</th>' : '') + '</tr></thead><tbody>' +
       rotulos.map(function (r, i) {
         var soma = series.reduce(function (a, s) { return a + (s.valores[i] || 0); }, 0);
-        return '<tr data-rot="' + esc(r) + '"><td class="forte">' + esc(r) + '</td>' +
+        return '<tr data-foco data-rot="' + esc(r) + '"><td class="forte">' + esc(r) + '</td>' +
           series.map(function (s) { return cel(s.valores[i]); }).join('') +
           (series.length > 1 ? '<td class="num forte">' + num(soma, opts.dec) + '</td>' : '') + '</tr>';
       }).join('') +

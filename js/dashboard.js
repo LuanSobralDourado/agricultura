@@ -10,9 +10,11 @@
    e assim publicar uma planilha nova do ano corrente não apaga o histórico.
 
    Regras do painel:
-   - a data de referência de TODOS os filtros, contadores e gráficos é a de
-     INSERÇÃO (coluna "Carimbo de data/hora"); a Data da Vistoria só aparece na
-     listagem de registros, porque tem digitação errada e serviços de anos antigos;
+   - a data de referência de TODOS os filtros, contadores e gráficos é a da
+     VISTORIA (quando o serviço foi feito) sempre que ela é plausível; quando
+     não é — ano digitado errado, data futura — o registro entra pela data de
+     INSERÇÃO (coluna "Carimbo de data/hora") e a listagem marca a célula.
+     Ver dataRef()/vistoriaValida() logo abaixo;
    - mecanização se mede em hectares; açudagem, em horas de máquina e nº de tanques;
    - todo gráfico aceita mais de um tipo de visualização, coerente com o dado;
    - clicar numa marca filtra e leva para a aba correspondente;
@@ -25,10 +27,30 @@
   var MEC = 'Mecanização';
   var ACU = 'Açudagem';
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-  var HASH_ADMIN = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
+  /* Não há hash de senha aqui: quem confere é salvar_mecanizacao.php. Um hash
+     neste arquivo seria baixado por qualquer visitante e quebrado offline. */
   var CHAVE_LOCAL = 'seagri_mecanizacao';
+  /* Preferências de apresentação. Ficam no navegador porque são de quem olha,
+     não da seleção: quem prefere barras reclicava 32 painéis a cada visita. */
+  var CHAVE_TIPOS = 'seagri_tipos_grafico';
+  var CHAVE_POR_PAG = 'seagri_por_pagina';
+
+  function lerPref(chave, padrao) {
+    try {
+      var v = localStorage.getItem(chave);
+      return v == null ? padrao : v;
+    } catch (e) { return padrao; }   // modo privado
+  }
 
   var CONSOLIDADO = 'todos';
+
+  /* Versão usada no cache-busting dos assets, lida do próprio <script> para o
+     histórico carregado sob demanda usar exatamente a mesma. */
+  var VERSAO = (function () {
+    var s = document.currentScript;
+    var m = s && s.src && s.src.match(/[?&]v=([^&]+)/);
+    return m ? m[1] : '';
+  })();
 
   var TODOS = [], META = {}, META_HIST = {}, FONTE = '', ANOS = [];
   var N_CORRENTE = 0;   // registros vindos da planilha do ano corrente (sem o histórico)
@@ -66,6 +88,16 @@
 
   /* -------------------------------------------------------------- utilidades */
   function el(id) { return document.getElementById(id); }
+  /** Espera parar de digitar antes de refazer o trabalho. Sem isto cada tecla
+      refiltrava a base inteira, o que travava a digitação no "Geral". */
+  function atrasar(fn, ms) {
+    var t;
+    return function () {
+      var ctx = this, args = arguments;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(ctx, args); }, ms);
+    };
+  }
   function unicos(arr) {
     return Array.from(new Set(arr)).filter(function (v) { return v && v !== NI; })
       .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
@@ -135,6 +167,12 @@
     var p = iso.split('-');
     return p[2] + '/' + p[1] + '/' + p[0];
   }
+  /** Cor da etiqueta de serviço. Há registro sem Ponto de controle preenchido:
+      sem o caso neutro ele saía com a etiqueta de açudagem, dizendo "Não
+      informado" em cima da cor de um serviço que ele não é. */
+  function tagServico(pc) {
+    return pc === MEC ? 'tag-mec' : pc === ACU ? 'tag-acu' : 'tag-ni';
+  }
   function mesRot(ym) { return MESES[+ym.slice(5, 7) - 1] + '/' + ym.slice(2, 4); }
   function rotParaMes(rot) {
     var i = MESES.indexOf(String(rot).split('/')[0]);
@@ -158,7 +196,7 @@
       Não usamos nome+imóvel: 209 produtores aparecem com o imóvel grafado de
       formas diferentes (ou em branco num registro e preenchido noutro), o que
       inflava a contagem em 307 pessoas que não existem. */
-  function chaveProdutor(r) { return chaveBusca(r.prod); }
+  function chaveProdutor(r) { return chaveBusca(r.prod).replace(/\s+/g, ' ').trim(); }
 
   /** Produtores distintos. O mesmo produtor atendido várias vezes no ano — ou
       em exercícios diferentes — conta uma vez só. */
@@ -181,14 +219,6 @@
     return m;
   }
 
-  function sha256(txt) {
-    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)).then(function (buf) {
-      return Array.from(new Uint8Array(buf)).map(function (b) {
-        return b.toString(16).padStart(2, '0');
-      }).join('');
-    });
-  }
-
   /* ------------------------------------------------------------------- tema */
   function tema() { return document.documentElement.getAttribute('data-tema') || 'claro'; }
   function pintarBotaoTema() {
@@ -203,7 +233,7 @@
     document.documentElement.setAttribute('data-tema', novo);
     try { localStorage.setItem('seagri_tema', novo); } catch (e) { /* modo privado */ }
     pintarBotaoTema();
-    render(); // as cores das séries vêm do CSS: precisa redesenhar
+    atualizar(); // as cores das séries vêm do CSS: todo desenho ficou velho
   }
 
   /* ---------------------------------------------------------------- filtros */
@@ -253,7 +283,7 @@
         F[p[1]] = this.value;
         pag = 1;
         popularFiltros();   // as outras listas se ajustam à nova escolha
-        render();
+        atualizar();
       });
     });
     el('btnLimpar').addEventListener('click', function () {
@@ -262,7 +292,7 @@
       el('busca').value = '';
       pag = 1;
       popularFiltros();
-      render();
+      atualizar();
     });
   }
 
@@ -333,7 +363,7 @@
     pag = 1;
     popularFiltros();
     sincronizarAno();
-    render();
+    atualizar();
   }
 
   /** O painel sempre abre no ano corrente — o mais recente da base. */
@@ -357,18 +387,29 @@
     tabela: '<rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 9.5h18M9.5 9.5V20" fill="none" stroke="currentColor" stroke-width="1.8"/>'
   };
 
+  /** Tipo escolhido por painel na última visita. */
+  var TIPOS_SALVOS = (function () {
+    try { return JSON.parse(lerPref(CHAVE_TIPOS, '{}')) || {}; } catch (e) { return {}; }
+  })();
+
+  function salvarTipos() {
+    try { localStorage.setItem(CHAVE_TIPOS, JSON.stringify(TIPOS)); } catch (e) { /* modo privado */ }
+  }
+
   function montarControles() {
     document.querySelectorAll('[data-tipos]').forEach(function (div) {
       var id = div.id;
       var tipos = div.getAttribute('data-tipos').split(',');
       // a tabela é a visão padrão de todo painel: encabeça os botões e é o que
-      // aparece ao abrir a página. Trocar de tipo vale só para a visita atual.
+      // aparece na primeira visita
       var iTab = tipos.indexOf('tabela');
       if (iTab > 0) {
         tipos.splice(iTab, 1);
         tipos.unshift('tabela');
       }
-      TIPOS[id] = tipos[0];
+      // a escolha da última visita vale, desde que ainda seja um tipo válido
+      // para este painel (a lista de tipos pode ter mudado no HTML)
+      TIPOS[id] = tipos.indexOf(TIPOS_SALVOS[id]) >= 0 ? TIPOS_SALVOS[id] : tipos[0];
 
       var cab = div.closest('.painel').querySelector('.painel-cab');
       var acoes = document.createElement('div');
@@ -397,6 +438,7 @@
           b.setAttribute('aria-pressed', on);
         });
         redesenhar(id);
+        salvarTipos();
       });
       acoes.appendChild(grupo);
 
@@ -416,17 +458,22 @@
   function aoClicarDe(div) {
     var campo = div.getAttribute('data-clique');
     if (!campo) return null;
-    var ir = div.getAttribute('data-ir');
+    var irPadrao = div.getAttribute('data-ir');
     return function (rot) {
       if (rot === 'Outros') return;
+      // variável local: reatribuir a do closure fazia o destino escolhido num
+      // clique valer para os cliques seguintes no mesmo gráfico
+      var ir = irPadrao;
       if (campo === 'mes') {
         // no consolidado o eixo do tempo é o ano: clicar abre aquele exercício
         if (porAno()) return selecionarAno(rot);
         var m = rotParaMes(rot);
         F.mes = (F.mes === m) ? '' : m;
       } else if (campo === 'pc') {
-        F.pc = (F.pc === rot) ? '' : rot;
-        ir = rot === ACU ? 'acudagem' : 'mecanizacao';
+        var ligando = F.pc !== rot;
+        F.pc = ligando ? rot : '';
+        // desmarcar o serviço não é "ir para o serviço": só abre a aba ao ligar
+        ir = ligando ? (rot === ACU ? 'acudagem' : rot === MEC ? 'mecanizacao' : irPadrao) : irPadrao;
       } else {
         var k = { mun: 'mun', esc: 'esc', cult: 'cult', tec: 'tec' }[campo];
         if (!k) return;
@@ -435,8 +482,17 @@
       // clicar num gráfico é escolher um filtro: as demais listas se ajustam
       popularFiltros();
       pag = 1;
-      if (ir) abrirAba(ir); else render();
+      if (ir) { invalidar(); abrirAba(ir); } else atualizar();
     };
+  }
+
+  /** Título do painel que contém o gráfico. Vira o aria-label do SVG: sem ele
+      todos os gráficos da tela se anunciavam como "Distribuição" ou "Série
+      temporal", um rótulo igual para coisas diferentes. */
+  function tituloDoPainel(div) {
+    var p = div.closest('.painel');
+    var h = p && p.querySelector('.painel-cab-tit h2');
+    return h ? h.textContent.trim() : '';
   }
 
   function pintarCat(id, dados, extra) {
@@ -445,6 +501,7 @@
     var opts = Object.assign({
       dec: +(div.getAttribute('data-dec') || 0),
       unidade: div.getAttribute('data-unidade') || '',
+      titulo: tituloDoPainel(div),
       aoClicar: aoClicarDe(div)
     }, extra || {});
     PAYLOAD[id] = { tipo: 'cat', dados: dados, opts: opts };
@@ -456,6 +513,7 @@
     if (!div) return;
     var opts = Object.assign({
       dec: +(div.getAttribute('data-dec') || 0),
+      titulo: tituloDoPainel(div),
       aoClicar: aoClicarDe(div)
     }, extra || {});
     PAYLOAD[id] = { tipo: 'ser', rotulos: rotulos, series: series, opts: opts };
@@ -685,9 +743,11 @@
   /* ------------------------------------------------------ ficha do produtor */
   var NOMES_PROD = [];
 
-  /** Remove acentos e caixa para a busca casar "joao" com "João". */
+  /** Remove acentos e caixa para a busca casar "joao" com "João".
+      Não mexe em espaços: realcar() usa o índice do resultado para recortar o
+      nome original, então a chave precisa ter o mesmo comprimento da entrada. */
   function chaveBusca(s) {
-    return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
   /** Nomes que casam com o texto digitado. Sem texto, ninguém casa: a aba só
@@ -726,6 +786,7 @@
     iSugestao = -1;
     el('listaProd').hidden = true;
     el('buscaProd').setAttribute('aria-expanded', 'false');
+    el('buscaProd').removeAttribute('aria-activedescendant');
   }
 
   /** Refaz a lista a cada tecla. Só abre com algo digitado e com mais de um
@@ -744,8 +805,10 @@
     var chave = chaveBusca(q);
     var mostra = SUGESTOES.slice(0, TETO_SUGESTOES);
     el('listaProd').innerHTML = mostra.map(function (n, i) {
-      return '<li class="prod-sugestao" role="option" aria-selected="false" data-i="' + i + '">' +
-        realcar(n, chave) + '</li>';
+      // id por opção: é o que aria-activedescendant aponta para o leitor de
+      // tela saber qual sugestão está sob as setas
+      return '<li class="prod-sugestao" role="option" id="prodSug' + i +
+        '" aria-selected="false" data-i="' + i + '">' + realcar(n, chave) + '</li>';
     }).join('') + (SUGESTOES.length > mostra.length
       ? '<li class="prod-sugestoes-mais">+' + G.num(SUGESTOES.length - mostra.length) +
         ' — refine a busca</li>' : '');
@@ -764,6 +827,7 @@
       li.setAttribute('aria-selected', on);
       if (on && li.scrollIntoView) li.scrollIntoView({ block: 'nearest' });
     });
+    el('buscaProd').setAttribute('aria-activedescendant', 'prodSug' + iSugestao);
   }
 
   function escolherSugestao(i) {
@@ -930,7 +994,7 @@
         return '<tr>' +
           '<td class="num">' + dataBR(r.d) + '</td>' +
           '<td class="num">' + dataBR(r.dv) + '</td>' +
-          '<td><span class="tag ' + (r.pc === MEC ? 'tag-mec' : 'tag-acu') + '">' + G.esc(r.pc) + '</span></td>' +
+          '<td><span class="tag ' + tagServico(r.pc) + '">' + G.esc(r.pc) + '</span></td>' +
           '<td>' + G.esc(r.mun || '—') + '</td>' +
           '<td>' + (r.cult.length ? r.cult.map(function (c) { return G.esc(c[0]) + ' (' + G.num(c[1], 1) + ' ha)'; }).join(', ') : '—') + '</td>' +
           '<td class="num">' + (r.ha  ? G.num(r.ha,  1) : '—') + '</td>' +
@@ -947,18 +1011,63 @@
   }
 
   /* -------------------------------------------------------------- renderizar */
-  function render() {
-    if (!TODOS.length) return;
-    rotularSeries();
+  /* O painel tem 9 abas, 32 gráficos e ~150 contadores — e uma aba visível por
+     vez. Redesenhar tudo a cada clique custava 167 ms no ano corrente e 570 ms
+     no "Geral", com a thread travada, e o custo subia a cada exercício novo.
+
+     O trabalho agora é dividido em três:
+       contexto()  calcula UMA vez por seleção os agregados que as abas dividem
+                   — inclusive os que o código antigo refazia 3 ou 4 vezes;
+       ABAS[nome]  desenha uma aba a partir desse contexto;
+       render()    desenha só a aba visível e marca as outras como sujas.
+     Abrir uma aba suja a desenha; voltar a uma já desenhada não custa nada. */
+
+  var CTX = null;      // contexto da seleção atual (null = recalcular)
+  var SUJAS = {};      // aba -> true quando o desenho está desatualizado
+  var abaAtiva = 'geral';
+
+  /** Filtro, período ou base mudou: todo desenho existente está velho. */
+  function invalidar() {
+    CTX = null;
+    Object.keys(ABAS).forEach(function (k) { SUJAS[k] = true; });
+  }
+
+  /** Invalida, registra a seleção na URL e redesenha a aba visível.
+      É o que toda mudança de filtro chama. */
+  function atualizar() {
+    invalidar();
+    gravarUrl(false);
+    render();
+  }
+
+  /* ---------------------------------------------------------------- contexto */
+  /** Tudo que as abas compartilham, calculado uma vez por seleção. */
+  function contexto() {
+    if (CTX) return CTX;
+
     var D = filtrar();
     var mec = D.filter(function (r) { return r.pc === MEC; });
     var acu = D.filter(function (r) { return r.pc === ACU; });
-    var ha = soma(mec, function (r) { return r.ha; });
+    var ha  = soma(mec, function (r) { return r.ha; });
     var hrs = soma(acu, function (r) { return r.hrs; });
     var nAc = soma(acu, function (r) { return r.ac; });
-    // o período não conta como filtro: ele é o recorte, não um corte dentro dele
-    var ativos = Object.keys(F).filter(function (k) { return k !== 'ano' && F[k]; }).length;
-    var noAno = TODOS.filter(function (r) { return !F.ano || anoDe(r) === F.ano; }).length;
+
+    /* Agregados usados por mais de um gráfico ou contador. Antes cada um era
+       recalculado onde fosse preciso: somarPor(mec, mun, ha) rodava 4 vezes e
+       contar(D, esc) 3 vezes no mesmo render. */
+    var haPorMun    = somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; });
+    var hrsPorMun   = somarPor(acu, function (r) { return r.mun; }, function (r) { return r.hrs; });
+    var acPorMun    = somarPor(acu, function (r) { return r.mun; }, function (r) { return r.ac; });
+    var haPorEsc    = somarPor(mec, function (r) { return r.esc; }, function (r) { return r.ha; });
+    var hrsPorEsc   = somarPor(acu, function (r) { return r.esc; }, function (r) { return r.hrs; });
+    var atendPorEsc = contar(D, function (r) { return r.esc; });
+    var atendPorMun = contar(D, function (r) { return r.mun; });
+    var atendPorTec = contar(D, function (r) { return r.rt; });
+    var atendPorPc  = contar(D, function (r) { return r.pc; });
+    var maqMec      = contar(mec, function (r) { return r.maq; });
+    var implMec     = contar(mec, function (r) { return r.impl; });
+    var maqAcu      = contar(acu, function (r) { return r.maq; });
+    var prodPorMun  = distintosPor(D, function (r) { return r.mun; }, chaveProdutor);
 
     var areaCult = new Map(), qtdCult = new Map(), sis = new Map(), haCult = 0, nCult = 0;
     D.forEach(function (r) {
@@ -971,33 +1080,25 @@
       });
     });
 
-    el('resumo').innerHTML = '<strong>' + G.num(D.length) + '</strong> de ' + G.num(noAno) +
-      ' registros ' + (F.ano ? 'em ' + F.ano : 'no geral (' + rotuloAno() + ')') +
-      (ativos ? ' (' + ativos + ' filtro' + (ativos > 1 ? 's' : '') + ' ativo' + (ativos > 1 ? 's' : '') + ')' : '') +
-      (D.length ? ' &middot; vistorias de ' + dataBR(dataRef(D[0])) +
-        ' a ' + dataBR(dataRef(D[D.length - 1])) : '');
+    // o período não conta como filtro: ele é o recorte, não um corte dentro dele
+    var ativos = Object.keys(F).filter(function (k) { return k !== 'ano' && F[k]; }).length;
+    var noAno = TODOS.filter(function (r) { return !F.ano || anoDe(r) === F.ano; }).length;
 
-    // ------------------------------------------- visão geral: contadores
-    // 4 seções de 6 (grid CSS = 6 colunas). Cada { _sec } vira um cabeçalho
-    // de linha que ocupa toda a largura do grid.
-    var nMulher = D.filter(function (r) { return r.sexo === 'Feminino'; }).length;
-    var topMun    = ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 1)[0];
-    var topMunHrs = ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.hrs; }), 1)[0];
-    var topCult   = ranking(areaCult, 1)[0];
-    var nEsc  = nDistintos(D, function (r) { return r.esc; });
-    var nTec  = nDistintos(D, function (r) { return r.rt; });
-    var nAssoc = new Set(D.map(function (r) { return r.assoc; }).filter(function (a) { return a && a !== NI; })).size;
-    var nMeses = new Set(D.map(function (r) { return dataRef(r).slice(0, 7); })).size;
-    var dae   = soma(D, function (r) { return r.dae; });
-    // Produtores distintos por nome e quantos voltaram mais de uma vez
     var contProd = atendimentosPorProdutor(D);
     var nProd = contProd.size;
     var nProdRec = Array.from(contProd.values()).filter(function (v) { return v > 1; }).length;
-    var nMun  = nDistintos(D, function (r) { return r.mun; });
 
-    /* Extras usados pelos contadores das outras abas — todas as abas abrem com
-       uma seção de contadores agrupada, igual à visão geral. */
+    var nEsc  = nDistintos(D, function (r) { return r.esc; });
+    var nTec  = nDistintos(D, function (r) { return r.rt; });
+    var nMun  = nDistintos(D, function (r) { return r.mun; });
+    var nAssoc = new Set(D.map(function (r) { return r.assoc; })
+      .filter(function (a) { return a && a !== NI; })).size;
+    var nMeses = new Set(D.map(function (r) { return dataRef(r).slice(0, 7); })).size;
+    var dae = soma(D, function (r) { return r.dae; });
     var nComDae  = D.filter(function (r) { return r.dae > 0; }).length;
+    var nComForm = D.filter(function (r) { return r.form; }).length;
+    var nComCult = D.filter(function (r) { return r.cult.length; }).length;
+    var nMulher  = D.filter(function (r) { return r.sexo === 'Feminino'; }).length;
 
     /* ---- comparação com o exercício anterior ------------------------------
        Só faz sentido com um ano específico escolhido (no "Geral" não há com o
@@ -1008,169 +1109,212 @@
     var Dant = temAnt ? filtrar(null, anoAnt) : [];
     var mecAnt = Dant.filter(function (r) { return r.pc === MEC; });
     var acuAnt = Dant.filter(function (r) { return r.pc === ACU; });
-    /** Acrescenta "· +22% vs 2025" ao subtítulo do contador. */
-    function vs(atual, anterior, texto) {
-      if (!temAnt || !anterior) return texto;
-      var d = (atual - anterior) / anterior * 100;
-      var seta = d > 0.5 ? '▲' : d < -0.5 ? '▼' : '=';
-      return texto + ' · ' + seta + ' ' + G.num(Math.abs(d), 0) + '% vs ' + anoAnt;
-    }
-
-    /* ---- DAE: distinguir "zero arrecadado" de "não coletado no exercício" -- */
-    var temDae = D.some(function (r) { return r.dae > 0; });
-    var daeVal = function (v) { return temDae ? moeda(v) : '—'; };
-    var daeSub = function (n) {
-      return temDae ? G.num(n) + ' atendimentos com DAE' : 'não coletado neste exercício';
-    };
 
     /* ---- produtividade da açudagem ---------------------------------------
        Só vistorias que têm hora E tanque: 7 registros com horas e zero tanques
        entravam no numerador e não no denominador, inflando a média. */
     var acuProd = acu.filter(function (r) { return r.hrs > 0 && r.ac > 0; });
-    var hrsProd = soma(acuProd, function (r) { return r.hrs; });
     var acProd  = soma(acuProd, function (r) { return r.ac; });
-    var horasPorTanque = acProd ? hrsProd / acProd : 0;
+    var horasPorTanque = acProd ? soma(acuProd, function (r) { return r.hrs; }) / acProd : 0;
 
-    /* ---- registros que não são nem mecanização nem açudagem --------------- */
-    var semServico = D.length - mec.length - acu.length;
-    var nComForm = D.filter(function (r) { return r.form; }).length;
-    var nComCult = D.filter(function (r) { return r.cult.length; }).length;
-    var topMunAc    = ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.ac; }), 1)[0];
-    var topMunAt    = ranking(contar(D, function (r) { return r.mun; }), 1)[0];
-    var topEscAt    = ranking(contar(D, function (r) { return r.esc; }), 1)[0];
-    var topEscHa    = ranking(somarPor(mec, function (r) { return r.esc; }, function (r) { return r.ha; }), 1)[0];
-    var topEscHrs   = ranking(somarPor(acu, function (r) { return r.esc; }, function (r) { return r.hrs; }), 1)[0];
-    var topTec      = ranking(contar(D, function (r) { return r.rt; }), 1)[0];
-    var topMaq      = ranking(contar(mec, function (r) { return r.maq; }), 1)[0];
-    var topSis      = ranking(sis, 1)[0];
-    var topCultQtd  = ranking(qtdCult, 1)[0];
-    var maxHa   = mec.reduce(function (a, r) { return Math.max(a, r.ha); }, 0);
-    var maxHrs  = acu.reduce(function (a, r) { return Math.max(a, r.hrs); }, 0);
-    var maxAc   = acu.reduce(function (a, r) { return Math.max(a, r.ac); }, 0);
-    var pct = function (n, t) { return t ? (n / t * 100).toFixed(1).replace('.', ',') + '%' : '—'; };
+    var temDae = D.some(function (r) { return r.dae > 0; });
 
+    var C = {
+      D: D, mec: mec, acu: acu, ha: ha, hrs: hrs, nAc: nAc,
+      haPorMun: haPorMun, hrsPorMun: hrsPorMun, acPorMun: acPorMun,
+      haPorEsc: haPorEsc, hrsPorEsc: hrsPorEsc, prodPorMun: prodPorMun,
+      atendPorEsc: atendPorEsc, atendPorMun: atendPorMun,
+      atendPorTec: atendPorTec, atendPorPc: atendPorPc,
+      maqMec: maqMec, implMec: implMec, maqAcu: maqAcu,
+      areaCult: areaCult, qtdCult: qtdCult, sis: sis, haCult: haCult, nCult: nCult,
+      ativos: ativos, noAno: noAno,
+      nProd: nProd, nProdRec: nProdRec, nEsc: nEsc, nTec: nTec, nMun: nMun,
+      nAssoc: nAssoc, nMeses: nMeses, dae: dae, nComDae: nComDae,
+      nComForm: nComForm, nComCult: nComCult, nMulher: nMulher,
+      anoAnt: anoAnt, temAnt: temAnt, Dant: Dant, mecAnt: mecAnt, acuAnt: acuAnt,
+      acuProd: acuProd, horasPorTanque: horasPorTanque,
+      semServico: D.length - mec.length - acu.length,
+      maxHa:  mec.reduce(function (a, r) { return Math.max(a, r.ha); }, 0),
+      maxHrs: acu.reduce(function (a, r) { return Math.max(a, r.hrs); }, 0),
+      maxAc:  acu.reduce(function (a, r) { return Math.max(a, r.ac); }, 0),
+
+      topMun:      ranking(haPorMun, 1)[0],
+      topMunHrs:   ranking(hrsPorMun, 1)[0],
+      topMunAc:    ranking(acPorMun, 1)[0],
+      topMunAt:    ranking(atendPorMun, 1)[0],
+      topEscAt:    ranking(atendPorEsc, 1)[0],
+      topEscHa:    ranking(haPorEsc, 1)[0],
+      topEscHrs:   ranking(hrsPorEsc, 1)[0],
+      topTec:      ranking(atendPorTec, 1)[0],
+      topMaq:      ranking(maqMec, 1)[0],
+      topCult:     ranking(areaCult, 1)[0],
+      topCultQtd:  ranking(qtdCult, 1)[0],
+      topSis:      ranking(sis, 1)[0],
+
+      /** "· ▲ 22% vs 2025" no subtítulo do contador. */
+      vs: function (atual, anterior, texto) {
+        if (!temAnt || !anterior) return texto;
+        var d = (atual - anterior) / anterior * 100;
+        var seta = d > 0.5 ? '▲' : d < -0.5 ? '▼' : '=';
+        return texto + ' · ' + seta + ' ' + G.num(Math.abs(d), 0) + '% vs ' + anoAnt;
+      },
+      /* DAE: distinguir "zero arrecadado" de "não coletado no exercício" */
+      daeVal: function (v) { return temDae ? moeda(v) : '—'; },
+      daeSub: function (n) {
+        return temDae ? G.num(n) + ' atendimentos com DAE' : 'não coletado neste exercício';
+      },
+      pct: function (n, t) { return t ? (n / t * 100).toFixed(1).replace('.', ',') + '%' : '—'; }
+    };
+
+    CTX = C;
+    return C;
+  }
+
+  /* ------------------------------------------------------ linha de resumo */
+  /** Fica acima das abas, então acompanha qualquer seleção — não é de aba. */
+  function linhaResumo(C) {
+    var D = C.D;
+    el('resumo').innerHTML = '<strong>' + G.num(D.length) + '</strong> de ' + G.num(C.noAno) +
+      ' registros ' + (F.ano ? 'em ' + F.ano : 'no geral (' + rotuloAno() + ')') +
+      (C.ativos ? ' (' + C.ativos + ' filtro' + (C.ativos > 1 ? 's' : '') +
+        ' ativo' + (C.ativos > 1 ? 's' : '') + ')' : '') +
+      (D.length ? ' &middot; vistorias de ' + dataBR(dataRef(D[0])) +
+        ' a ' + dataBR(dataRef(D[D.length - 1])) : '');
+  }
+
+  /* ============================================================ ABA: GERAL */
+  function abaGeral(C) {
+    var D = C.D, mec = C.mec, acu = C.acu;
     tiles('kpis', [
       /* ── SEÇÃO 1: Resultados gerais ─────────────────────────────────── */
       { _sec: 'Resultados gerais' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao',
-        sub: vs(ha, soma(mecAnt, function (r) { return r.ha; }), 'campo Total mecanizado') },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem',
-        sub: vs(hrs, soma(acuAnt, function (r) { return r.hrs; }), 'serviços de açudagem') },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem',
-        sub: vs(nAc, soma(acuAnt, function (r) { return r.ac; }), 'construídos ou reformados') },
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao',
+        sub: C.vs(C.ha, soma(C.mecAnt, function (r) { return r.ha; }), 'campo Total mecanizado') },
+      { rot: 'Horas de máquina', val: G.num(C.hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem',
+        sub: C.vs(C.hrs, soma(C.acuAnt, function (r) { return r.hrs; }), 'serviços de açudagem') },
+      { rot: 'Tanques / açudes', val: G.num(C.nAc), cls: 'acu', ir: 'acudagem',
+        sub: C.vs(C.nAc, soma(C.acuAnt, function (r) { return r.ac; }), 'construídos ou reformados') },
       { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros',
-        sub: vs(D.length, Dant.length, 'vistorias registradas') },
-      { rot: 'Produtores atendidos', val: G.num(nProd), ir: 'beneficiario',
-        sub: vs(nProd, nProdutores(Dant), 'nomes distintos, sem repetir') },
-      { rot: 'Municípios atendidos', val: G.num(nMun), ir: 'municipio',
-        sub: vs(nMun, nDistintos(Dant, function (r) { return r.mun; }), 'com pelo menos 1 atendimento') },
+        sub: C.vs(D.length, C.Dant.length, 'vistorias registradas') },
+      { rot: 'Produtores atendidos', val: G.num(C.nProd), ir: 'beneficiario',
+        sub: C.vs(C.nProd, nProdutores(C.Dant), 'nomes distintos, sem repetir') },
+      { rot: 'Municípios atendidos', val: G.num(C.nMun), ir: 'municipio',
+        sub: C.vs(C.nMun, nDistintos(C.Dant, function (r) { return r.mun; }), 'com pelo menos 1 atendimento') },
 
       /* ── SEÇÃO 2: Mecanização e açudagem ─────────────────────────── */
       { _sec: 'Mecanização e açudagem' },
       { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao',
-        sub: G.num(ha, 1) + ' ha registrados' },
+        sub: G.num(C.ha, 1) + ' ha registrados' },
       { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem',
-        sub: G.num(hrs, 1) + ' h de máquina' },
-      { rot: 'Média por atendimento', val: G.num(mec.length ? ha / mec.length : 0, 1), un: 'ha', cls: 'mec',
+        sub: G.num(C.hrs, 1) + ' h de máquina' },
+      { rot: 'Média por atendimento', val: G.num(mec.length ? C.ha / mec.length : 0, 1), un: 'ha', cls: 'mec',
         ir: 'mecanizacao', sub: 'hectares mecanizados' },
-      { rot: 'Horas por tanque', val: G.num(horasPorTanque, 1), un: 'h', cls: 'acu',
+      { rot: 'Horas por tanque', val: G.num(C.horasPorTanque, 1), un: 'h', cls: 'acu',
         ir: 'acudagem', sub: 'só vistorias com hora e tanque' },
-      { rot: 'Maior área atendida', val: G.num(maxHa, 1),
+      { rot: 'Maior área atendida', val: G.num(C.maxHa, 1),
         un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'em um único atendimento' },
-      { rot: 'Maior serviço de açudagem', val: G.num(maxHrs, 1),
+      { rot: 'Maior serviço de açudagem', val: G.num(C.maxHrs, 1),
         un: 'h', cls: 'acu', ir: 'acudagem', sub: 'em uma única vistoria' },
 
       /* ── SEÇÃO 3: Culturas e território ──────────────────────────── */
       { _sec: 'Culturas e território' },
-      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura',
-        sub: G.num(nCult) + ' declarações no total' },
-      { rot: 'Área das culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura',
+      { rot: 'Culturas diferentes', val: G.num(C.areaCult.size), cls: 'mec', ir: 'cultura',
+        sub: G.num(C.nCult) + ' declarações no total' },
+      { rot: 'Área das culturas', val: G.num(C.haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura',
         sub: 'soma das áreas declaradas' },
-      { rot: 'Cultura com mais área', val: topCult ? G.esc(topCult.rot) : '—', cls: 'mec texto',
-        ir: 'cultura', sub: topCult ? G.num(topCult.val, 1) + ' ha declarados' : '' },
-      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto',
-        ir: 'municipio', sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
-      { rot: 'Município com mais horas', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto',
-        ir: 'municipio', sub: topMunHrs ? G.num(topMunHrs.val, 1) + ' h de máquina' : '' },
-      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio',
-        sub: G.num(nTec) + ' técnicos atuando' },
+      { rot: 'Cultura com mais área', val: C.topCult ? G.esc(C.topCult.rot) : '—', cls: 'mec texto',
+        ir: 'cultura', sub: C.topCult ? G.num(C.topCult.val, 1) + ' ha declarados' : '' },
+      { rot: 'Município com mais hectares', val: C.topMun ? G.esc(C.topMun.rot) : '—', cls: 'mec texto',
+        ir: 'municipio', sub: C.topMun ? G.num(C.topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Município com mais horas', val: C.topMunHrs ? G.esc(C.topMunHrs.rot) : '—', cls: 'acu texto',
+        ir: 'municipio', sub: C.topMunHrs ? G.num(C.topMunHrs.val, 1) + ' h de máquina' : '' },
+      { rot: 'Escritórios locais', val: G.num(C.nEsc), ir: 'escritorio',
+        sub: G.num(C.nTec) + ' técnicos atuando' },
 
       /* ── SEÇÃO 4: Perfil dos beneficiários ───────────────────────── */
       { _sec: 'Perfil dos beneficiários' },
-      { rot: 'Produtores recorrentes', val: G.num(nProdRec), ir: 'beneficiario',
-        sub: pct(nProdRec, nProd) + ' voltaram mais de uma vez' },
-      { rot: 'Mulheres atendidas', val: G.num(nMulher), ir: 'beneficiario',
-        sub: D.length ? (nMulher / D.length * 100).toFixed(1).replace('.', ',') + '% dos atendimentos' : '' },
-      { rot: 'Produtores com DAP', val: G.num(D.filter(function (r) { return r.dap === 'Sim'; }).length),
+      { rot: 'Produtores recorrentes', val: G.num(C.nProdRec), ir: 'beneficiario',
+        sub: C.pct(C.nProdRec, C.nProd) + ' voltaram mais de uma vez' },
+      { rot: 'Mulheres atendidas', val: G.num(C.nMulher), ir: 'beneficiario',
+        sub: D.length ? (C.nMulher / D.length * 100).toFixed(1).replace('.', ',') + '% dos atendimentos' : '' },
+      // nomes distintos, não registros: o cartão está na seção de perfil dos
+      // beneficiários, ao lado de "Produtores recorrentes", e contar linhas
+      // fazia o mesmo produtor aparecer uma vez por atendimento
+      { rot: 'Produtores com DAP', val: G.num(nProdutores(D.filter(function (r) { return r.dap === 'Sim'; }))),
         ir: 'beneficiario', sub: 'DAP declarada como válida' },
-      { rot: 'Associações e cooperativas', val: G.num(nAssoc), ir: 'beneficiario',
+      { rot: 'Associações e cooperativas', val: G.num(C.nAssoc), ir: 'beneficiario',
         sub: 'organizações citadas' },
-      { rot: 'DAE arrecadada', val: daeVal(dae), cls: 'texto', ir: 'registros',
-        sub: daeSub(nComDae) },
-      { rot: 'Meses com vistoria', val: G.num(nMeses), ir: 'registros',
+      { rot: 'DAE arrecadada', val: C.daeVal(C.dae), cls: 'texto', ir: 'registros',
+        sub: C.daeSub(C.nComDae) },
+      { rot: 'Meses com vistoria', val: G.num(C.nMeses), ir: 'registros',
         sub: 'em ' + rotuloAno() }
     ]);
 
-    // ------------------------------------------- visão geral: gráficos
-    pintarCat('gMunHa', ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 14));
-    pintarCat('gTipo', ranking(contar(D, function (r) { return r.pc; }), 2), { ordem: ORDEM.tipo, unidade: 'atendimentos', multicor: true });
-    pintarCat('gCultGeral', ranking(areaCult, 10, true), { cor: 'var(--s4)' });
-    pintarCat('gSistemaGeral', ranking(sis, 5, true), { unidade: 'culturas', ordem: ORDEM.sistema, multicor: true });
+    pintarCat('gMunHa', ranking(C.haPorMun, 14));
+    pintarCat('gTipo', ranking(C.atendPorPc, 2), { ordem: ORDEM.tipo, unidade: 'atendimentos', multicor: true });
+    pintarCat('gCultGeral', ranking(C.areaCult, 10, true), { cor: 'var(--s4)' });
+    pintarCat('gSistemaGeral', ranking(C.sis, 5, true), { unidade: 'culturas', ordem: ORDEM.sistema, multicor: true });
     serieDe('gSerie', D, function () { return 1; });
-    pintarCat('gMunHrs', ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.hrs; }), 12), { cor: 'var(--s2)' });
-    pintarCat('gMunAc', ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.ac; }), 12), { cor: 'var(--s2)' });
-    pintarCat('gEscGeral', ranking(contar(D, function (r) { return r.esc; }), 12), { cor: 'var(--s3)' });
+    pintarCat('gMunHrs', ranking(C.hrsPorMun, 12), { cor: 'var(--s2)' });
+    pintarCat('gMunAc', ranking(C.acPorMun, 12), { cor: 'var(--s2)' });
+    pintarCat('gEscGeral', ranking(C.atendPorEsc, 12), { cor: 'var(--s3)' });
+  }
 
-    // --------------------------------------------------------- mecanização
+  /* ====================================================== ABA: MECANIZAÇÃO */
+  function abaMecanizacao(C) {
+    var D = C.D, mec = C.mec;
     tiles('kpisMec', [
       { _sec: 'Resultados da mecanização' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', sub: 'campo Total mecanizado' },
-      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', sub: pct(mec.length, D.length) + ' dos atendimentos' },
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', sub: 'campo Total mecanizado' },
+      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', sub: C.pct(mec.length, D.length) + ' dos atendimentos' },
       { rot: 'Produtores atendidos', val: G.num(nProdutores(mec)), cls: 'mec', ir: 'beneficiario',
         sub: 'nomes distintos, sem repetir' },
       { rot: 'Municípios atendidos', val: G.num(nDistintos(mec, function (r) { return r.mun; })), cls: 'mec',
         ir: 'municipio', sub: 'com mecanização' },
-      { rot: 'Média por atendimento', val: G.num(mec.length ? ha / mec.length : 0, 1), un: 'ha', cls: 'mec', sub: 'hectares' },
-      { rot: 'Maior área atendida', val: G.num(maxHa, 1), un: 'ha', cls: 'mec', sub: 'em um único atendimento' },
+      { rot: 'Média por atendimento', val: G.num(mec.length ? C.ha / mec.length : 0, 1), un: 'ha', cls: 'mec', sub: 'hectares' },
+      { rot: 'Maior área atendida', val: G.num(C.maxHa, 1), un: 'ha', cls: 'mec', sub: 'em um único atendimento' },
 
       { _sec: 'Culturas e áreas' },
-      { rot: 'Hectares em culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura', sub: 'soma das áreas declaradas' },
-      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(nCult) + ' declarações' },
-      { rot: 'Cultura com mais área', val: topCult ? G.esc(topCult.rot) : '—', cls: 'mec texto', ir: 'cultura',
-        sub: topCult ? G.num(topCult.val, 1) + ' ha declarados' : '' },
-      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
-        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
-      { rot: 'Atendimentos com cultura', val: G.num(nComCult), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' },
-      { rot: 'Culturas por atendimento', val: G.num(nComCult ? nCult / nComCult : 0, 1), cls: 'mec', sub: 'média declarada' },
+      { rot: 'Hectares em culturas', val: G.num(C.haCult, 1), un: 'ha', cls: 'mec', ir: 'cultura', sub: 'soma das áreas declaradas' },
+      { rot: 'Culturas diferentes', val: G.num(C.areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(C.nCult) + ' declarações' },
+      { rot: 'Cultura com mais área', val: C.topCult ? G.esc(C.topCult.rot) : '—', cls: 'mec texto', ir: 'cultura',
+        sub: C.topCult ? G.num(C.topCult.val, 1) + ' ha declarados' : '' },
+      { rot: 'Município com mais hectares', val: C.topMun ? G.esc(C.topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
+        sub: C.topMun ? G.num(C.topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Atendimentos com cultura', val: G.num(C.nComCult), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' },
+      { rot: 'Culturas por atendimento', val: G.num(C.nComCult ? C.nCult / C.nComCult : 0, 1), cls: 'mec', sub: 'média declarada' },
 
       { _sec: 'Máquinas e arrecadação' },
-      { rot: 'Tipos de máquina', val: G.num(contar(mec, function (r) { return r.maq; }).size), cls: 'mec', sub: 'categorias identificadas' },
-      { rot: 'Máquina mais usada', val: topMaq ? G.esc(topMaq.rot) : '—', cls: 'mec texto',
-        sub: topMaq ? G.num(topMaq.val) + ' atendimentos' : '' },
-      { rot: 'Implementos e serviços', val: G.num(contar(mec, function (r) { return r.impl; }).size), cls: 'mec', sub: 'tipos identificados' },
-      { rot: 'DAE arrecadada', val: daeVal(soma(mec, function (r) { return r.dae; })), cls: 'mec texto',
-        sub: daeSub(mec.filter(function (r) { return r.dae > 0; }).length) },
+      { rot: 'Tipos de máquina', val: G.num(C.maqMec.size), cls: 'mec', sub: 'categorias identificadas' },
+      { rot: 'Máquina mais usada', val: C.topMaq ? G.esc(C.topMaq.rot) : '—', cls: 'mec texto',
+        sub: C.topMaq ? G.num(C.topMaq.val) + ' atendimentos' : '' },
+      { rot: 'Implementos e serviços', val: G.num(C.implMec.size), cls: 'mec', sub: 'tipos identificados' },
+      { rot: 'DAE arrecadada', val: C.daeVal(soma(mec, function (r) { return r.dae; })), cls: 'mec texto',
+        sub: C.daeSub(mec.filter(function (r) { return r.dae > 0; }).length) },
       { rot: 'Escritórios envolvidos', val: G.num(nDistintos(mec, function (r) { return r.esc; })), cls: 'mec',
         ir: 'escritorio', sub: 'com mecanização' },
       { rot: 'Meses com vistoria', val: G.num(new Set(mec.map(function (r) { return dataRef(r).slice(0, 7); })).size), cls: 'mec',
         ir: 'registros', sub: 'em ' + rotuloAno() }
     ]);
     serieDe('gSerieMec', mec, function (r) { return r.ha; }, MEC);
-    pintarCat('gMecMun', ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 14));
-    pintarCat('gMaq', ranking(contar(mec, function (r) { return r.maq; }), 10), { cor: 'var(--s1)' });
-    pintarCat('gImpl', ranking(contar(mec, function (r) { return r.impl; }), 10), { cor: 'var(--s5)' });
+    pintarCat('gMecMun', ranking(C.haPorMun, 14));
+    pintarCat('gMaq', ranking(C.maqMec, 10), { cor: 'var(--s1)' });
+    pintarCat('gImpl', ranking(C.implMec, 10), { cor: 'var(--s5)' });
     pintarCat('gTrator', ranking(contar(mec, function (r) { return r.tt; }), 4), { unidade: 'atendimentos', multicor: true });
     pintarCat('gFaixa', faixas(mec, function (r) { return r.ha; }, [
       { rot: 'até 2 ha', max: 2 }, { rot: '2 a 5 ha', max: 5 }, { rot: '5 a 10 ha', max: 10 },
-      { rot: '10 a 20 ha', max: 20 }, { rot: '20 a 50 ha', max: 50 }, { rot: 'acima de 50', max: Infinity }
+      { rot: '10 a 20 ha', max: 20 }, { rot: '20 a 50 ha', max: 50 }, { rot: 'acima de 50 ha', max: Infinity }
     ]), { cor: 'var(--s1)' });
+  }
 
-    // ------------------------------------------------------------ açudagem
+  /* ========================================================= ABA: AÇUDAGEM */
+  function abaAcudagem(C) {
+    var D = C.D, acu = C.acu;
     tiles('kpisAcu', [
       { _sec: 'Resultados da açudagem' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', sub: 'escavadeira hidráulica' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', sub: 'construídos ou reformados' },
-      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', sub: pct(acu.length, D.length) + ' dos atendimentos' },
+      { rot: 'Horas de máquina', val: G.num(C.hrs, 1), un: 'h', cls: 'acu', sub: 'escavadeira hidráulica' },
+      { rot: 'Tanques / açudes', val: G.num(C.nAc), cls: 'acu', sub: 'construídos ou reformados' },
+      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', sub: C.pct(acu.length, D.length) + ' dos atendimentos' },
       { rot: 'Produtores atendidos', val: G.num(nProdutores(acu)), cls: 'acu', ir: 'beneficiario',
         sub: 'nomes distintos, sem repetir' },
       { rot: 'Municípios atendidos', val: G.num(nDistintos(acu, function (r) { return r.mun; })), cls: 'acu',
@@ -1179,62 +1323,64 @@
         ir: 'escritorio', sub: 'com açudagem' },
 
       { _sec: 'Produtividade' },
-      { rot: 'Horas por tanque', val: G.num(horasPorTanque, 1), un: 'h', cls: 'acu',
-        sub: G.num(acuProd.length) + ' vistorias com hora e tanque' },
-      { rot: 'Horas por vistoria', val: G.num(acu.length ? hrs / acu.length : 0, 1), un: 'h', cls: 'acu', sub: 'média por atendimento' },
-      { rot: 'Tanques por vistoria', val: G.num(acu.length ? nAc / acu.length : 0, 1), cls: 'acu', sub: 'média por atendimento' },
-      { rot: 'Maior serviço', val: G.num(maxHrs, 1), un: 'h', cls: 'acu', sub: 'em uma única vistoria' },
-      { rot: 'Mais tanques numa vistoria', val: G.num(maxAc), cls: 'acu', sub: 'num único atendimento' },
+      { rot: 'Horas por tanque', val: G.num(C.horasPorTanque, 1), un: 'h', cls: 'acu',
+        sub: G.num(C.acuProd.length) + ' vistorias com hora e tanque' },
+      { rot: 'Horas por vistoria', val: G.num(acu.length ? C.hrs / acu.length : 0, 1), un: 'h', cls: 'acu', sub: 'média por atendimento' },
+      { rot: 'Tanques por vistoria', val: G.num(acu.length ? C.nAc / acu.length : 0, 1), cls: 'acu', sub: 'média por atendimento' },
+      { rot: 'Maior serviço', val: G.num(C.maxHrs, 1), un: 'h', cls: 'acu', sub: 'em uma única vistoria' },
+      { rot: 'Mais tanques numa vistoria', val: G.num(C.maxAc), cls: 'acu', sub: 'num único atendimento' },
       { rot: 'Meses com vistoria', val: G.num(new Set(acu.map(function (r) { return dataRef(r).slice(0, 7); })).size), cls: 'acu',
         ir: 'registros', sub: 'em ' + rotuloAno() },
 
       { _sec: 'Território e arrecadação' },
-      { rot: 'Município com mais horas', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto', ir: 'municipio',
-        sub: topMunHrs ? G.num(topMunHrs.val, 1) + ' h de máquina' : '' },
-      { rot: 'Município com mais tanques', val: topMunAc ? G.esc(topMunAc.rot) : '—', cls: 'acu texto', ir: 'municipio',
-        sub: topMunAc ? G.num(topMunAc.val) + ' tanques' : '' },
-      { rot: 'Escritório com mais horas', val: topEscHrs ? G.esc(topEscHrs.rot) : '—', cls: 'acu texto', ir: 'escritorio',
-        sub: topEscHrs ? G.num(topEscHrs.val, 1) + ' h de máquina' : '' },
-      { rot: 'DAE arrecadada', val: daeVal(soma(acu, function (r) { return r.dae; })), cls: 'acu texto',
-        sub: daeSub(acu.filter(function (r) { return r.dae > 0; }).length) },
+      { rot: 'Município com mais horas', val: C.topMunHrs ? G.esc(C.topMunHrs.rot) : '—', cls: 'acu texto', ir: 'municipio',
+        sub: C.topMunHrs ? G.num(C.topMunHrs.val, 1) + ' h de máquina' : '' },
+      { rot: 'Município com mais tanques', val: C.topMunAc ? G.esc(C.topMunAc.rot) : '—', cls: 'acu texto', ir: 'municipio',
+        sub: C.topMunAc ? G.num(C.topMunAc.val) + ' tanques' : '' },
+      { rot: 'Escritório com mais horas', val: C.topEscHrs ? G.esc(C.topEscHrs.rot) : '—', cls: 'acu texto', ir: 'escritorio',
+        sub: C.topEscHrs ? G.num(C.topEscHrs.val, 1) + ' h de máquina' : '' },
+      { rot: 'DAE arrecadada', val: C.daeVal(soma(acu, function (r) { return r.dae; })), cls: 'acu texto',
+        sub: C.daeSub(acu.filter(function (r) { return r.dae > 0; }).length) },
       { rot: 'Técnicos atuando', val: G.num(nDistintos(acu, function (r) { return r.rt; })), cls: 'acu',
         ir: 'escritorio', sub: 'responsáveis pelas vistorias' },
-      { rot: 'Tipos de máquina', val: G.num(contar(acu, function (r) { return r.maq; }).size), cls: 'acu', sub: 'categorias identificadas' }
+      { rot: 'Tipos de máquina', val: G.num(C.maqAcu.size), cls: 'acu', sub: 'categorias identificadas' }
     ]);
     serieDe('gSerieAcu', acu, function (r) { return r.hrs; }, ACU);
     serieDe('gSerieAc', acu, function (r) { return r.ac; }, ACU);
-    pintarCat('gAcuMun', ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.ac; }), 12), { cor: 'var(--s2)' });
-    pintarCat('gAcuEsc', ranking(somarPor(acu, function (r) { return r.esc; }, function (r) { return r.hrs; }), 12), { cor: 'var(--s2)' });
-    pintarCat('gMaqAcu', ranking(contar(acu, function (r) { return r.maq; }), 8), { cor: 'var(--s2)' });
+    pintarCat('gAcuMun', ranking(C.acPorMun, 12), { cor: 'var(--s2)' });
+    pintarCat('gAcuEsc', ranking(C.hrsPorEsc, 12), { cor: 'var(--s2)' });
+    pintarCat('gMaqAcu', ranking(C.maqAcu, 8), { cor: 'var(--s2)' });
     pintarCat('gAcuQtd', faixas(acu, function (r) { return r.ac; }, [
       { rot: '1 tanque', max: 1 }, { rot: '2 tanques', max: 2 },
       { rot: '3 tanques', max: 3 }, { rot: '4 ou mais', max: Infinity }
     ]), { cor: 'var(--s2)' });
+  }
 
-    // ------------------------------------------------------------- cultura
-    var maiorCult = ranking(areaCult, 1)[0];
+  /* ========================================================== ABA: CULTURA */
+  function abaCultura(C) {
+    var D = C.D, acu = C.acu;
     tiles('kpisCult', [
       { _sec: 'Áreas e declarações' },
-      { rot: 'Hectares em culturas', val: G.num(haCult, 1), un: 'ha', cls: 'mec', sub: 'soma das áreas declaradas' },
-      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec',
-        sub: vs(areaCult.size, (function () { var m = new Set(); Dant.forEach(function (r) {
+      { rot: 'Hectares em culturas', val: G.num(C.haCult, 1), un: 'ha', cls: 'mec', sub: 'soma das áreas declaradas' },
+      { rot: 'Culturas diferentes', val: G.num(C.areaCult.size), cls: 'mec',
+        sub: C.vs(C.areaCult.size, (function () { var m = new Set(); C.Dant.forEach(function (r) {
           r.cult.forEach(function (c) { m.add(c[0]); }); }); return m.size; })(), 'no período selecionado') },
-      { rot: 'Declarações de cultura', val: G.num(nCult), cls: 'mec', sub: 'linhas de cultura na planilha' },
-      { rot: 'Área média declarada', val: G.num(nCult ? haCult / nCult : 0, 1), un: 'ha', cls: 'mec', sub: 'por declaração' },
-      { rot: 'Atendimentos com cultura', val: G.num(nComCult), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' },
-      { rot: 'Culturas por atendimento', val: G.num(nComCult ? nCult / nComCult : 0, 1), cls: 'mec',
+      { rot: 'Declarações de cultura', val: G.num(C.nCult), cls: 'mec', sub: 'linhas de cultura na planilha' },
+      { rot: 'Área média declarada', val: G.num(C.nCult ? C.haCult / C.nCult : 0, 1), un: 'ha', cls: 'mec', sub: 'por declaração' },
+      { rot: 'Atendimentos com cultura', val: G.num(C.nComCult), cls: 'mec', sub: 'de ' + G.num(D.length) + ' no total' },
+      { rot: 'Culturas por atendimento', val: G.num(C.nComCult ? C.nCult / C.nComCult : 0, 1), cls: 'mec',
         sub: 'média entre os que declararam' },
 
       { _sec: 'Destaques' },
-      { rot: 'Cultura com mais área', val: maiorCult ? G.esc(maiorCult.rot) : '—', cls: 'mec texto',
-        sub: maiorCult ? G.num(maiorCult.val, 1) + ' ha declarados' : '' },
-      { rot: 'Cultura mais frequente', val: topCultQtd ? G.esc(topCultQtd.rot) : '—', cls: 'mec texto',
-        sub: topCultQtd ? G.num(topCultQtd.val) + ' declarações' : '' },
-      { rot: 'Sistema predominante', val: topSis ? G.esc(topSis.rot) : '—', cls: 'mec texto',
-        sub: topSis ? G.num(topSis.val) + ' culturas' : '' },
-      { rot: 'Sistemas de cultivo', val: G.num(sis.size), cls: 'mec', sub: 'formas de produção citadas' },
-      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
-        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Cultura com mais área', val: C.topCult ? G.esc(C.topCult.rot) : '—', cls: 'mec texto',
+        sub: C.topCult ? G.num(C.topCult.val, 1) + ' ha declarados' : '' },
+      { rot: 'Cultura mais frequente', val: C.topCultQtd ? G.esc(C.topCultQtd.rot) : '—', cls: 'mec texto',
+        sub: C.topCultQtd ? G.num(C.topCultQtd.val) + ' declarações' : '' },
+      { rot: 'Sistema predominante', val: C.topSis ? G.esc(C.topSis.rot) : '—', cls: 'mec texto',
+        sub: C.topSis ? G.num(C.topSis.val) + ' culturas' : '' },
+      { rot: 'Sistemas de cultivo', val: G.num(C.sis.size), cls: 'mec', sub: 'formas de produção citadas' },
+      { rot: 'Município com mais hectares', val: C.topMun ? G.esc(C.topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
+        sub: C.topMun ? G.num(C.topMun.val, 1) + ' ha mecanizados' : '' },
       { rot: 'Municípios com cultura', val: G.num(nDistintos(D.filter(function (r) { return r.cult.length; }),
         function (r) { return r.mun; })), cls: 'mec', ir: 'municipio', sub: 'com declaração de cultura' },
       // o recorte destes contadores é TODA a seleção, não só mecanização:
@@ -1242,11 +1388,11 @@
       { rot: 'Declarações em açudagem', val: G.num(acu.filter(function (r) { return r.cult.length; }).length),
         cls: 'acu', sub: 'vistorias de açudagem que declararam cultura' }
     ]);
-    var rkCult = ranking(areaCult, 14);
-    rkCult.forEach(function (d) { d.sub = '(' + G.num(qtdCult.get(d.rot) || 0) + ' reg.)'; });
+    var rkCult = ranking(C.areaCult, 14);
+    rkCult.forEach(function (d) { d.sub = '(' + G.num(C.qtdCult.get(d.rot) || 0) + ' reg.)'; });
     pintarCat('gCult', rkCult, { cor: 'var(--s4)' });
-    pintarCat('gCultQtd', ranking(qtdCult, 14), { cor: 'var(--s4)' });
-    pintarCat('gSistema', ranking(sis, 5, true), { unidade: 'culturas', ordem: ORDEM.sistema, multicor: true });
+    pintarCat('gCultQtd', ranking(C.qtdCult, 14), { cor: 'var(--s4)' });
+    pintarCat('gSistema', ranking(C.sis, 5, true), { unidade: 'culturas', ordem: ORDEM.sistema, multicor: true });
     // D, e não mec: 84 vistorias de açudagem também declaram cultura, e o
     // contador "Atendimentos com cultura" ao lado já conta essas
     pintarCat('gCultPorReg', faixas(D, function (r) { return r.cult.length; }, [
@@ -1254,88 +1400,100 @@
       { rot: '3 culturas', max: 3 }, { rot: '4 culturas', max: 4 }
     ]), { cor: 'var(--s4)' });
     tabelaCulturaMunicipio(D);
+  }
 
-    // ----------------------------------------------------------- município
+  /* ======================================================== ABA: MUNICÍPIO */
+  function abaMunicipio(C) {
+    var D = C.D;
     tiles('kpisMun', [
       { _sec: 'Cobertura territorial' },
-      { rot: 'Municípios atendidos', val: G.num(nMun), sub: 'na seleção atual' },
+      { rot: 'Municípios atendidos', val: G.num(C.nMun), sub: 'na seleção atual' },
       { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
-      { rot: 'Produtores atendidos', val: G.num(nProd), ir: 'beneficiario',
-        sub: G.num(nProd ? D.length / nProd : 0, 1) + ' atendimentos por produtor' },
-      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: G.num(nTec) + ' técnicos atuando' },
-      { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
-      { rot: 'Meses com vistoria', val: G.num(nMeses), ir: 'registros', sub: 'em ' + rotuloAno() },
+      { rot: 'Produtores atendidos', val: G.num(C.nProd), ir: 'beneficiario',
+        sub: G.num(C.nProd ? D.length / C.nProd : 0, 1) + ' atendimentos por produtor' },
+      { rot: 'Escritórios locais', val: G.num(C.nEsc), ir: 'escritorio', sub: G.num(C.nTec) + ' técnicos atuando' },
+      { rot: 'Atendimentos por município', val: G.num(C.nMun ? D.length / C.nMun : 0, 1), sub: 'média da seleção' },
+      { rot: 'Meses com vistoria', val: G.num(C.nMeses), ir: 'registros', sub: 'em ' + rotuloAno() },
 
       { _sec: 'Volume por território' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
-      { rot: 'Hectares por município', val: G.num(nMun ? ha / nMun : 0, 1), un: 'ha', cls: 'mec', sub: 'média da seleção' },
-      { rot: 'Horas por município', val: G.num(nMun ? hrs / nMun : 0, 1), un: 'h', cls: 'acu', sub: 'média da seleção' },
-      { rot: 'DAE arrecadada', val: daeVal(dae), cls: 'texto', ir: 'registros', sub: daeSub(nComDae) },
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
+      { rot: 'Horas de máquina', val: G.num(C.hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Tanques / açudes', val: G.num(C.nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Hectares por município', val: G.num(C.nMun ? C.ha / C.nMun : 0, 1), un: 'ha', cls: 'mec', sub: 'média da seleção' },
+      { rot: 'Horas por município', val: G.num(C.nMun ? C.hrs / C.nMun : 0, 1), un: 'h', cls: 'acu', sub: 'média da seleção' },
+      { rot: 'DAE arrecadada', val: C.daeVal(C.dae), cls: 'texto', ir: 'registros', sub: C.daeSub(C.nComDae) },
 
       { _sec: 'Destaques por município' },
-      { rot: 'Mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto',
-        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' },
-      { rot: 'Mais horas de máquina', val: topMunHrs ? G.esc(topMunHrs.rot) : '—', cls: 'acu texto',
-        sub: topMunHrs ? G.num(topMunHrs.val, 1) + ' h de escavadeira' : '' },
-      { rot: 'Mais tanques', val: topMunAc ? G.esc(topMunAc.rot) : '—', cls: 'acu texto',
-        sub: topMunAc ? G.num(topMunAc.val) + ' tanques' : '' },
-      { rot: 'Mais atendimentos', val: topMunAt ? G.esc(topMunAt.rot) : '—', cls: 'texto',
-        sub: topMunAt ? G.num(topMunAt.val) + ' vistorias' : '' },
-      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: 'declaradas no território' },
-      { rot: 'Municípios sem açudagem', val: G.num(nMun - nDistintos(acu, function (r) { return r.mun; })),
+      { rot: 'Mais hectares', val: C.topMun ? G.esc(C.topMun.rot) : '—', cls: 'mec texto',
+        sub: C.topMun ? G.num(C.topMun.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Mais horas de máquina', val: C.topMunHrs ? G.esc(C.topMunHrs.rot) : '—', cls: 'acu texto',
+        sub: C.topMunHrs ? G.num(C.topMunHrs.val, 1) + ' h de escavadeira' : '' },
+      { rot: 'Mais tanques', val: C.topMunAc ? G.esc(C.topMunAc.rot) : '—', cls: 'acu texto',
+        sub: C.topMunAc ? G.num(C.topMunAc.val) + ' tanques' : '' },
+      { rot: 'Mais atendimentos', val: C.topMunAt ? G.esc(C.topMunAt.rot) : '—', cls: 'texto',
+        sub: C.topMunAt ? G.num(C.topMunAt.val) + ' vistorias' : '' },
+      { rot: 'Culturas diferentes', val: G.num(C.areaCult.size), cls: 'mec', ir: 'cultura', sub: 'declaradas no território' },
+      { rot: 'Municípios sem açudagem', val: G.num(C.nMun - nDistintos(C.acu, function (r) { return r.mun; })),
         sub: 'só com mecanização' }
     ]);
-    pintarCat('gMunHa2', ranking(somarPor(mec, function (r) { return r.mun; }, function (r) { return r.ha; }), 14));
-    pintarCat('gMunHrs2', ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.hrs; }), 14), { cor: 'var(--s2)' });
-    pintarCat('gMunAc2', ranking(somarPor(acu, function (r) { return r.mun; }, function (r) { return r.ac; }), 14), { cor: 'var(--s2)' });
-    pintarCat('gMunProd', ranking(distintosPor(D, function (r) { return r.mun; }, chaveProdutor), 14), { cor: 'var(--s3)' });
+    pintarCat('gMunHa2', ranking(C.haPorMun, 14));
+    pintarCat('gMunHrs2', ranking(C.hrsPorMun, 14), { cor: 'var(--s2)' });
+    pintarCat('gMunAc2', ranking(C.acPorMun, 14), { cor: 'var(--s2)' });
+    pintarCat('gMunProd', ranking(C.prodPorMun, 14), { cor: 'var(--s3)' });
     tabelaResumo('tMun', D, function (r) { return r.mun; }, 'Município');
+  }
 
-    // --------------------------------------------------- escritório local
+  /* ================================================= ABA: ESCRITÓRIO LOCAL */
+  function abaEscritorio(C) {
+    var D = C.D;
     tiles('kpisEsc', [
       { _sec: 'Estrutura de atendimento' },
-      { rot: 'Escritórios locais', val: G.num(nEsc), sub: 'com pelo menos 1 vistoria' },
-      { rot: 'Técnicos atuando', val: G.num(nTec), sub: 'responsáveis técnicos distintos' },
+      { rot: 'Escritórios locais', val: G.num(C.nEsc), sub: 'com pelo menos 1 vistoria' },
+      { rot: 'Técnicos atuando', val: G.num(C.nTec), sub: 'responsáveis técnicos distintos' },
       { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias registradas' },
-      { rot: 'Municípios cobertos', val: G.num(nMun), ir: 'municipio', sub: 'na seleção atual' },
-      { rot: 'Produtores atendidos', val: G.num(nProd), ir: 'beneficiario',
-        sub: G.num(nProd ? D.length / nProd : 0, 1) + ' atendimentos por produtor' },
-      { rot: 'Atendimentos por escritório', val: G.num(nEsc ? D.length / nEsc : 0, 1), sub: 'média da seleção' },
+      { rot: 'Municípios cobertos', val: G.num(C.nMun), ir: 'municipio', sub: 'na seleção atual' },
+      { rot: 'Produtores atendidos', val: G.num(C.nProd), ir: 'beneficiario',
+        sub: G.num(C.nProd ? D.length / C.nProd : 0, 1) + ' atendimentos por produtor' },
+      { rot: 'Atendimentos por escritório', val: G.num(C.nEsc ? D.length / C.nEsc : 0, 1), sub: 'média da seleção' },
 
       { _sec: 'Produção por escritório' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
-      { rot: 'Hectares por escritório', val: G.num(nEsc ? ha / nEsc : 0, 1), un: 'ha', cls: 'mec', sub: 'média da seleção' },
-      { rot: 'Atendimentos por técnico', val: G.num(nTec ? D.length / nTec : 0, 1), sub: 'média da seleção' },
-      { rot: 'DAE arrecadada', val: daeVal(dae), cls: 'texto', ir: 'registros', sub: daeSub(nComDae) },
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
+      { rot: 'Horas de máquina', val: G.num(C.hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Tanques / açudes', val: G.num(C.nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Hectares por escritório', val: G.num(C.nEsc ? C.ha / C.nEsc : 0, 1), un: 'ha', cls: 'mec', sub: 'média da seleção' },
+      { rot: 'Atendimentos por técnico', val: G.num(C.nTec ? D.length / C.nTec : 0, 1), sub: 'média da seleção' },
+      { rot: 'DAE arrecadada', val: C.daeVal(C.dae), cls: 'texto', ir: 'registros', sub: C.daeSub(C.nComDae) },
 
       { _sec: 'Destaques' },
-      { rot: 'Mais atendimentos', val: topEscAt ? G.esc(topEscAt.rot) : '—', cls: 'texto',
-        sub: topEscAt ? G.num(topEscAt.val) + ' vistorias' : '' },
-      { rot: 'Mais hectares', val: topEscHa ? G.esc(topEscHa.rot) : '—', cls: 'mec texto',
-        sub: topEscHa ? G.num(topEscHa.val, 1) + ' ha mecanizados' : '' },
-      { rot: 'Mais horas de máquina', val: topEscHrs ? G.esc(topEscHrs.rot) : '—', cls: 'acu texto',
-        sub: topEscHrs ? G.num(topEscHrs.val, 1) + ' h de escavadeira' : '' },
-      { rot: 'Técnico com mais vistorias', val: topTec ? G.esc(topTec.rot) : '—', cls: 'texto',
-        sub: topTec ? G.num(topTec.val) + ' atendimentos' : '' },
-      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao', sub: pct(mec.length, D.length) + ' do total' },
-      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem', sub: pct(acu.length, D.length) + ' do total' }
+      { rot: 'Mais atendimentos', val: C.topEscAt ? G.esc(C.topEscAt.rot) : '—', cls: 'texto',
+        sub: C.topEscAt ? G.num(C.topEscAt.val) + ' vistorias' : '' },
+      { rot: 'Mais hectares', val: C.topEscHa ? G.esc(C.topEscHa.rot) : '—', cls: 'mec texto',
+        sub: C.topEscHa ? G.num(C.topEscHa.val, 1) + ' ha mecanizados' : '' },
+      { rot: 'Mais horas de máquina', val: C.topEscHrs ? G.esc(C.topEscHrs.rot) : '—', cls: 'acu texto',
+        sub: C.topEscHrs ? G.num(C.topEscHrs.val, 1) + ' h de escavadeira' : '' },
+      { rot: 'Técnico com mais vistorias', val: C.topTec ? G.esc(C.topTec.rot) : '—', cls: 'texto',
+        sub: C.topTec ? G.num(C.topTec.val) + ' atendimentos' : '' },
+      { rot: 'Vistorias de mecanização', val: G.num(C.mec.length), cls: 'mec', ir: 'mecanizacao', sub: C.pct(C.mec.length, D.length) + ' do total' },
+      { rot: 'Vistorias de açudagem', val: G.num(C.acu.length), cls: 'acu', ir: 'acudagem', sub: C.pct(C.acu.length, D.length) + ' do total' }
     ]);
-    pintarCat('gEsc', ranking(contar(D, function (r) { return r.esc; }), 14), { cor: 'var(--s3)' });
-    pintarCat('gEscHa', ranking(somarPor(mec, function (r) { return r.esc; }, function (r) { return r.ha; }), 14));
-    pintarCat('gEscHrs', ranking(somarPor(acu, function (r) { return r.esc; }, function (r) { return r.hrs; }), 14), { cor: 'var(--s2)' });
-    pintarCat('gTec', ranking(contar(D, function (r) { return r.rt; }), 14), { cor: 'var(--s3)' });
+    pintarCat('gEsc', ranking(C.atendPorEsc, 14), { cor: 'var(--s3)' });
+    pintarCat('gEscHa', ranking(C.haPorEsc, 14));
+    pintarCat('gEscHrs', ranking(C.hrsPorEsc, 14), { cor: 'var(--s2)' });
+    pintarCat('gTec', ranking(C.atendPorTec, 14), { cor: 'var(--s3)' });
     tabelaResumo('tEsc', D, function (r) { return r.esc; }, 'Escritório local');
+  }
 
-    // -------------------------------------------------------- beneficiário
-    // A aba é só a consulta por produtor: nada é mostrado até alguém ser
-    // escolhido na busca — ficha() é quem preenche contadores e histórico.
-    montarSelProd(D);
+  /* ===================================================== ABA: BENEFICIÁRIO */
+  /* Só a consulta por produtor: nada aparece até alguém ser escolhido na
+     busca — ficha() é quem preenche contadores e histórico. Montar a lista de
+     ~2.600 nomes com localeCompare é caro, e antes rodava em todo render. */
+  function abaBeneficiario(C) {
+    montarSelProd(C.D);
+  }
 
-    // ----------------------------------------------------------- registros
+  /* ======================================================== ABA: REGISTROS */
+  function abaRegistros(C) {
+    var D = C.D;
     var comCpf   = D.filter(function (r) { return r.pid >= 0; }).length;
     var comDap   = D.filter(function (r) { return r.dap !== NI; }).length;
     var comPropr = D.filter(function (r) { return r.propr && r.propr !== NI; }).length;
@@ -1343,77 +1501,170 @@
 
     tiles('kpisReg', [
       { _sec: 'Volume de registros' },
-      { rot: 'Registros na seleção', val: G.num(D.length), sub: 'de ' + G.num(noAno) + ' no período' },
-      { rot: 'Vistorias de mecanização', val: G.num(mec.length), cls: 'mec', ir: 'mecanizacao', sub: pct(mec.length, D.length) + ' do total' },
-      { rot: 'Vistorias de açudagem', val: G.num(acu.length), cls: 'acu', ir: 'acudagem', sub: pct(acu.length, D.length) + ' do total' },
+      { rot: 'Registros na seleção', val: G.num(D.length), sub: 'de ' + G.num(C.noAno) + ' no período' },
+      { rot: 'Vistorias de mecanização', val: G.num(C.mec.length), cls: 'mec', ir: 'mecanizacao', sub: C.pct(C.mec.length, D.length) + ' do total' },
+      { rot: 'Vistorias de açudagem', val: G.num(C.acu.length), cls: 'acu', ir: 'acudagem', sub: C.pct(C.acu.length, D.length) + ' do total' },
       // mec + acu nem sempre fecha o total: há registro sem Ponto de controle
-      { rot: 'Sem serviço informado', val: G.num(semServico),
-        sub: semServico ? 'não entram em mecanização nem açudagem' : 'todos classificados' },
-      { rot: 'Meses com vistoria', val: G.num(nMeses), sub: 'em ' + rotuloAno() },
-      { rot: 'Registros por mês', val: G.num(nMeses ? D.length / nMeses : 0, 1), sub: 'média da seleção' },
+      { rot: 'Sem serviço informado', val: G.num(C.semServico),
+        sub: C.semServico ? 'não entram em mecanização nem açudagem' : 'todos classificados' },
+      { rot: 'Meses com vistoria', val: G.num(C.nMeses), sub: 'em ' + rotuloAno() },
+      { rot: 'Registros por mês', val: G.num(C.nMeses ? D.length / C.nMeses : 0, 1), sub: 'média da seleção' },
 
       { _sec: 'Conteúdo dos registros' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
-      { rot: 'DAE arrecadada', val: daeVal(dae), cls: 'texto', sub: daeSub(nComDae) },
-      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(nCult) + ' declarações' },
-      { rot: 'Associações citadas', val: G.num(nAssoc), ir: 'beneficiario', sub: 'organizações de produtores' },
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: 'total da seleção' },
+      { rot: 'Horas de máquina', val: G.num(C.hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'Tanques / açudes', val: G.num(C.nAc), cls: 'acu', ir: 'acudagem', sub: 'total da seleção' },
+      { rot: 'DAE arrecadada', val: C.daeVal(C.dae), cls: 'texto', sub: C.daeSub(C.nComDae) },
+      { rot: 'Culturas diferentes', val: G.num(C.areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(C.nCult) + ' declarações' },
+      { rot: 'Associações citadas', val: G.num(C.nAssoc), ir: 'beneficiario', sub: 'organizações de produtores' },
 
       { _sec: 'Abrangência' },
-      { rot: 'Municípios', val: G.num(nMun), ir: 'municipio', sub: 'na seleção atual' },
-      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: 'com registro' },
-      { rot: 'Técnicos responsáveis', val: G.num(nTec), ir: 'escritorio', sub: 'assinando as vistorias' },
-      { rot: 'Produtores atendidos', val: G.num(nProd), ir: 'beneficiario', sub: 'nomes distintos, sem repetir' },
-      { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
-      { rot: 'Filtros ativos', val: G.num(ativos), sub: ativos ? 'restringindo a seleção' : 'nenhum filtro aplicado' },
+      { rot: 'Municípios', val: G.num(C.nMun), ir: 'municipio', sub: 'na seleção atual' },
+      { rot: 'Escritórios locais', val: G.num(C.nEsc), ir: 'escritorio', sub: 'com registro' },
+      { rot: 'Técnicos responsáveis', val: G.num(C.nTec), ir: 'escritorio', sub: 'assinando as vistorias' },
+      { rot: 'Produtores atendidos', val: G.num(C.nProd), ir: 'beneficiario', sub: 'nomes distintos, sem repetir' },
+      { rot: 'Atendimentos por município', val: G.num(C.nMun ? D.length / C.nMun : 0, 1), sub: 'média da seleção' },
+      { rot: 'Filtros ativos', val: G.num(C.ativos), sub: C.ativos ? 'restringindo a seleção' : 'nenhum filtro aplicado' },
 
       /* Quanto do cadastro está de fato preenchido. Antes isso só existia no
          texto da nota, que quase ninguém abre — e não respondia aos filtros. */
       { _sec: 'Qualidade do cadastro' },
-      { rot: 'CPF válido', val: pct(comCpf, D.length), cls: 'texto',
+      { rot: 'CPF válido', val: C.pct(comCpf, D.length), cls: 'texto',
         sub: G.num(D.length - comCpf) + ' registros sem CPF utilizável' },
-      { rot: 'DAP informada', val: pct(comDap, D.length), cls: 'texto',
+      { rot: 'DAP informada', val: C.pct(comDap, D.length), cls: 'texto',
         sub: G.num(D.length - comDap) + ' sem resposta sobre DAP' },
-      { rot: 'Propriedade informada', val: pct(comPropr, D.length), cls: 'texto',
+      { rot: 'Propriedade informada', val: C.pct(comPropr, D.length), cls: 'texto',
         sub: G.num(D.length - comPropr) + ' sem nome do imóvel' },
-      { rot: 'Formulário digitalizado', val: pct(nComForm, D.length), cls: 'texto',
-        sub: G.num(D.length - nComForm) + ' sem link do formulário' },
-      { rot: 'Cultura declarada', val: pct(nComCult, D.length), cls: 'mec texto',
-        sub: G.num(D.length - nComCult) + ' sem nenhuma cultura' },
-      { rot: 'Observação preenchida', val: pct(comObs, D.length), cls: 'texto',
+      { rot: 'Formulário digitalizado', val: C.pct(C.nComForm, D.length), cls: 'texto',
+        sub: G.num(D.length - C.nComForm) + ' sem link do formulário' },
+      { rot: 'Cultura declarada', val: C.pct(C.nComCult, D.length), cls: 'mec texto',
+        sub: G.num(D.length - C.nComCult) + ' sem nenhuma cultura' },
+      { rot: 'Observação preenchida', val: C.pct(comObs, D.length), cls: 'texto',
         sub: G.num(comObs) + ' registros com anotação' }
     ]);
     tabela(D);
-    nota();
-    fonteDados();
+  }
 
-    // ----------------------------------------------------------- relatório
+  /* ======================================================== ABA: RELATÓRIO */
+  function abaRelatorio(C) {
+    var D = C.D;
     tiles('kpisRel', [
       { _sec: 'Abrangência do relatório' },
-      { rot: 'Municípios com registro', val: G.num(nMun), sub: 'disponíveis para relatório' },
+      { rot: 'Municípios com registro', val: G.num(C.nMun), sub: 'disponíveis para relatório' },
       { rot: 'Atendimentos', val: G.num(D.length), ir: 'registros', sub: 'vistorias consolidadas' },
-      { rot: 'Produtores atendidos', val: G.num(nProd), ir: 'beneficiario',
-        sub: G.num(nProd ? D.length / nProd : 0, 1) + ' atendimentos por produtor' },
-      { rot: 'Escritórios locais', val: G.num(nEsc), ir: 'escritorio', sub: G.num(nTec) + ' técnicos atuando' },
-      { rot: 'Meses com vistoria', val: G.num(nMeses), sub: 'em ' + rotuloAno() },
-      { rot: 'Atendimentos por município', val: G.num(nMun ? D.length / nMun : 0, 1), sub: 'média da seleção' },
+      { rot: 'Produtores atendidos', val: G.num(C.nProd), ir: 'beneficiario',
+        sub: G.num(C.nProd ? D.length / C.nProd : 0, 1) + ' atendimentos por produtor' },
+      { rot: 'Escritórios locais', val: G.num(C.nEsc), ir: 'escritorio', sub: G.num(C.nTec) + ' técnicos atuando' },
+      { rot: 'Meses com vistoria', val: G.num(C.nMeses), sub: 'em ' + rotuloAno() },
+      { rot: 'Atendimentos por município', val: G.num(C.nMun ? D.length / C.nMun : 0, 1), sub: 'média da seleção' },
 
       { _sec: 'Totais consolidados' },
-      { rot: 'Hectares mecanizados', val: G.num(ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: G.num(mec.length) + ' vistorias' },
-      { rot: 'Horas de máquina', val: G.num(hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: G.num(acu.length) + ' vistorias' },
-      { rot: 'Tanques / açudes', val: G.num(nAc), cls: 'acu', ir: 'acudagem', sub: 'construídos ou reformados' },
-      { rot: 'Culturas diferentes', val: G.num(areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(haCult, 1) + ' ha declarados' },
-      { rot: 'DAE arrecadada', val: daeVal(dae), cls: 'texto', sub: daeSub(nComDae) },
-      { rot: 'Município com mais hectares', val: topMun ? G.esc(topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
-        sub: topMun ? G.num(topMun.val, 1) + ' ha mecanizados' : '' }
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao', sub: G.num(C.mec.length) + ' vistorias' },
+      { rot: 'Horas de máquina', val: G.num(C.hrs, 1), un: 'h', cls: 'acu', ir: 'acudagem', sub: G.num(C.acu.length) + ' vistorias' },
+      { rot: 'Tanques / açudes', val: G.num(C.nAc), cls: 'acu', ir: 'acudagem', sub: 'construídos ou reformados' },
+      { rot: 'Culturas diferentes', val: G.num(C.areaCult.size), cls: 'mec', ir: 'cultura', sub: G.num(C.haCult, 1) + ' ha declarados' },
+      { rot: 'DAE arrecadada', val: C.daeVal(C.dae), cls: 'texto', sub: C.daeSub(C.nComDae) },
+      { rot: 'Município com mais hectares', val: C.topMun ? G.esc(C.topMun.rot) : '—', cls: 'mec texto', ir: 'municipio',
+        sub: C.topMun ? G.num(C.topMun.val, 1) + ' ha mecanizados' : '' }
     ]);
-    var griRel = el('relatorioGrid');
-    if (griRel && griRel.closest('.aba-conteudo.ativa')) renderRelatorio(D);
+    renderRelatorio(D);
+  }
+
+  /* ============================================ ABA: ATUALIZAR DADOS (admin) */
+  function abaAdmin() {
+    fonteDados();
+  }
+
+  /* --------------------------------------------------- despachante das abas */
+  var ABAS = {
+    geral: abaGeral, mecanizacao: abaMecanizacao, acudagem: abaAcudagem,
+    cultura: abaCultura, municipio: abaMunicipio, escritorio: abaEscritorio,
+    beneficiario: abaBeneficiario, registros: abaRegistros,
+    relatorio: abaRelatorio, admin: abaAdmin
+  };
+
+  /** Desenha a aba visível. As demais só quando forem abertas. */
+  function render() {
+    if (!TODOS.length) return;
+    rotularSeries();
+    var C = contexto();
+    linhaResumo(C);
+    var f = ABAS[abaAtiva];
+    if (!f) return;
+    f(C);
+    SUJAS[abaAtiva] = false;
   }
 
   /* ------------------------------------------------------------------ tabela */
   var pag = 1, POR_PAG = 25;
+
+  /* Ordenação da listagem. O padrão é a inserção mais recente primeiro: é onde
+     se confere um caso concreto, e o caso concreto quase sempre é recente —
+     abrindo pelo mais antigo, o que interessa caía na última página. */
+  var ORD = { col: 'd', dir: -1 };
+  var CHAVE_ORD = {
+    d:    function (r) { return r.d; },
+    dv:   function (r) { return r.dv || ''; },
+    pc:   function (r) { return r.pc || ''; },
+    prod: function (r) { return r.prod || ''; },
+    mun:  function (r) { return r.mun || ''; },
+    ha:   function (r) { return r.ha; },
+    hrs:  function (r) { return r.hrs; },
+    ac:   function (r) { return r.ac; },
+    dae:  function (r) { return r.dae; }
+  };
+  // datas são ISO: comparação direta já ordena e é mais rápida que localeCompare
+  var ORD_TEXTO = { pc: 1, prod: 1, mun: 1 };
+
+  function ordenar(L) {
+    var f = CHAVE_ORD[ORD.col];
+    if (!f) return L;
+    var texto = !!ORD_TEXTO[ORD.col];
+    return L.slice().sort(function (a, b) {
+      var x = f(a), y = f(b);
+      var c = texto ? String(x).localeCompare(String(y), 'pt-BR')
+        : (x < y ? -1 : x > y ? 1 : 0);
+      return c * ORD.dir;
+    });
+  }
+
+  /** Marca no cabeçalho qual coluna manda, para o olho e para o leitor de tela. */
+  function pintarCabecalhoOrdem() {
+    document.querySelectorAll('table.dados.registros th[data-ord]').forEach(function (th) {
+      var atual = th.getAttribute('data-ord') === ORD.col;
+      th.classList.toggle('ord', atual);
+      th.classList.toggle('ord-desc', atual && ORD.dir < 0);
+      if (atual) th.setAttribute('aria-sort', ORD.dir < 0 ? 'descending' : 'ascending');
+      else th.removeAttribute('aria-sort');
+    });
+  }
+
+  function ligarOrdenacao() {
+    var tabelaEl = document.querySelector('table.dados.registros thead');
+    if (!tabelaEl) return;
+    var trocar = function (th) {
+      var col = th.getAttribute('data-ord');
+      if (!col) return;
+      // mesma coluna inverte; coluna nova começa decrescente nos números e nas
+      // datas (o interessante é o maior/mais recente) e crescente nos textos
+      if (ORD.col === col) ORD.dir = -ORD.dir;
+      else { ORD.col = col; ORD.dir = ORD_TEXTO[col] ? 1 : -1; }
+      pag = 1;
+      pintarCabecalhoOrdem();
+      tabela(contexto().D);
+    };
+    tabelaEl.addEventListener('click', function (e) {
+      var th = e.target.closest('th[data-ord]');
+      if (th) trocar(th);
+    });
+    tabelaEl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var th = e.target.closest('th[data-ord]');
+      if (!th) return;
+      e.preventDefault();
+      trocar(th);
+    });
+  }
 
   function tabela(D) {
     // chaveBusca (e não toLowerCase): a busca do produtor já ignorava acentos e
@@ -1423,6 +1674,7 @@
       return chaveBusca(r.prod + ' ' + r.mun + ' ' + r.esc + ' ' + r.propr + ' ' + r.rt + ' ' +
         r.loc + ' ' + r.obs + ' ' + r.cult.map(function (c) { return c[0]; }).join(' ')).indexOf(q) >= 0;
     });
+    L = ordenar(L);
     if ((pag - 1) * POR_PAG >= L.length) pag = 1;
     var pagina = L.slice((pag - 1) * POR_PAG, (pag - 1) * POR_PAG + POR_PAG);
     var nada = '<span class="nada">—</span>';
@@ -1439,7 +1691,7 @@
         '<td class="num' + (vistoriaSuspeita ? ' alerta' : '') + '" ' +
         (vistoriaSuspeita ? 'title="Data de vistoria fora do intervalo possível — este registro entrou pela data de lançamento"' : '') + '>' +
         dataBR(r.dv) + '</td>' +
-        '<td><span class="tag ' + (r.pc === MEC ? 'tag-mec' : 'tag-acu') + '">' + G.esc(r.pc) + '</span></td>' +
+        '<td><span class="tag ' + tagServico(r.pc) + '">' + G.esc(r.pc) + '</span></td>' +
         '<td class="forte">' + G.esc(r.prod || '—') + '<br><small class="fraco">' + G.esc(r.propr) + '</small></td>' +
         '<td>' + G.esc(r.mun) + '<br><small class="fraco">' + G.esc(r.esc) + '</small></td>' +
         '<td>' + cult + '</td>' +
@@ -1611,13 +1863,19 @@
       var hrsMap = somarPor(acu, chaveTempo, function (r) { return r.hrs; });
       var acMap  = somarPor(acu, chaveTempo, function (r) { return r.ac; });
       var cntAcuMap = somarPor(acu, chaveTempo, function () { return 1; });
+      // mesma regra do contador "Horas por tanque" do painel: só vistorias que
+      // têm hora E tanque. Dividir hrs/nAc direto contava horas de vistorias
+      // sem tanque no numerador e não no denominador, inflando a média
+      var acuProdM = acu.filter(function (r) { return r.hrs > 0 && r.ac > 0; });
+      var acProdM = soma(acuProdM, function (r) { return r.ac; });
+      var hTanque = acProdM ? soma(acuProdM, function (r) { return r.hrs; }) / acProdM : 0;
       htmlAcu = '<div class="relatorio-sec">' +
         '<h2 class="relatorio-sec-tit acu">A&ccedil;udagem</h2>' +
         '<div class="ficha">' +
         '<div class="ficha-item"><div class="ficha-rot">Vistorias</div><div class="ficha-val">' + G.num(acu.length) + '</div></div>' +
         '<div class="ficha-item"><div class="ficha-rot">Horas m&aacute;quina</div><div class="ficha-val">' + G.num(hrs, 1) + ' h</div></div>' +
         '<div class="ficha-item"><div class="ficha-rot">Tanques / a&ccedil;udes</div><div class="ficha-val">' + G.num(nAc) + '</div></div>' +
-        '<div class="ficha-item"><div class="ficha-rot">Horas/tanque</div><div class="ficha-val">' + (nAc ? G.num(hrs / nAc, 1) : '—') + ' h</div></div>' +
+        '<div class="ficha-item"><div class="ficha-rot">Horas/tanque</div><div class="ficha-val">' + (hTanque ? G.num(hTanque, 1) + ' h' : '—') + '</div></div>' +
         '</div>' +
         (mesesAcu.length ? '<h3>Por ' + tituloTempo() + '</h3>' + tTbl([colunaTempo(), 'Atendimentos', 'Horas', 'Tanques'],
           mesesAcu.map(function (k) {
@@ -1662,7 +1920,7 @@
         return '<tr>' +
           '<td class="num">' + dataBR(r.d) + '</td>' +
           '<td class="num">' + dataBR(r.dv) + '</td>' +
-          '<td><span class="tag ' + (r.pc === MEC ? 'tag-mec' : 'tag-acu') + '">' + G.esc(r.pc) + '</span></td>' +
+          '<td><span class="tag ' + tagServico(r.pc) + '">' + G.esc(r.pc) + '</span></td>' +
           '<td class="forte">' + G.esc(r.prod || '—') + '<br><small class="fraco">' + G.esc(r.propr || '') + '</small></td>' +
           '<td>' + (r.cult.length ? r.cult.map(function (c) { return G.esc(c[0]) + ' (' + G.num(c[1], 1) + ' ha)'; }).join(', ') : '—') + '</td>' +
           '<td class="num">' + (r.ha ? G.num(r.ha, 1) : '—') + '</td>' +
@@ -1722,6 +1980,7 @@
       'border:1px solid #c9d2da;white-space:nowrap}' +
     '.tag-mec{color:#2e7d4f;border-color:#2e7d4f;background:#eaf5ee}' +
     '.tag-acu{color:#1f6f9c;border-color:#1f6f9c;background:#e9f2f8}' +
+    '.tag-ni{color:#6b7885;border-color:#c9d2da;background:#f1f4f6}' +
     'a{color:inherit;text-decoration:none}' +
     '.relatorio-footer{margin-top:18px;padding-top:8px;border-top:1px solid #d8dee5;' +
       'font-size:9px;color:#6b7885;text-align:center}';
@@ -1750,32 +2009,151 @@
       return vistoriaValida(r) && r.dv.slice(0, 4) !== r.d.slice(0, 4);
     }).length;
     var anosHist = (META_HIST.anos || []).join(', ');
+    if (!el('nota')) return;
+    el('nota').innerHTML =
+      '<b>Sobre os dados.</b> Fonte: <code>' + G.esc(META.arquivo || 'planilha de mecanização') +
+      '</code>, aba <code>' + G.esc(META.aba || 'dados') + '</code> — ' + G.num(N_CORRENTE) +
+      ' registros do ano corrente, importados em ' + G.esc(META.gerado_em || '—') + '.' +
+      (anosHist ? ' Os exercícios encerrados (' + G.esc(anosHist) + ') vêm da aba <code>' +
+        G.esc(META_HIST.aba || 'geral') + '</code> da mesma planilha — ' + G.num(META_HIST.registros || 0) +
+        ' registros que não mudam mais.' : '') +
+      ' <b>A data de referência do painel é a da vistoria</b> — o que vale é quando o serviço foi feito.' +
+      '<ul>' +
+      '<li>' + G.num(outroAno) + ' registros têm vistoria confiável de um ano e lançamento de outro: ' +
+      'contam no exercício da <em>vistoria</em>, não no do lançamento;</li>' +
+      '<li>' + G.num(semVistoria) + ' registros têm <em>Data da Vistoria</em> impossível ' +
+      '(ano digitado errado ou data futura) e entraram pela data de lançamento — ' +
+      'aparecem destacados na coluna Vistoria da listagem;</li>' +
+      '<li>' + G.num(somar('cpf_invalido')) + ' registros sem CPF válido; por isso os produtores distintos ' +
+      'são contados pelo <em>nome</em> normalizado, e não pelo CPF;</li>' +
+      '<li>' + G.num(somar('sem_geo')) + ' registros sem coordenada geográfica utilizável, por isso não há mapa;</li>' +
+      '<li>' + G.num(somar('sem_formulario')) + ' registros sem link do formulário digitalizado.</li>' +
+      '</ul>' +
+      'Nos exercícios de 2024 e 2025 a planilha não registrou a área da primeira cultura; ' +
+      'nesses casos ela recebe o <em>Total mecanizado</em> do atendimento, que é como 2023 e 2026 se comportam ' +
+      'quando há uma única cultura declarada. ' +
+      'Campos livres (nome do trator, tipo de implemento) foram padronizados por palavra-chave, ' +
+      'e um mesmo atendimento pode contar em mais de uma categoria de máquina ou implemento.';
+  }
+
+  /* --------------------------------------------------------- estado na URL */
+  /* A seleção inteira — aba e filtros — vai para o endereço. Assim uma visão
+     do painel pode ser mandada por link e sobrevive ao F5; antes só a aba ia
+     para o hash e recarregar voltava sempre ao ano corrente, sem filtro. */
+  var CAMPOS_URL = ['ano', 'mes', 'pc', 'mun', 'esc', 'cult', 'tec'];
+
+  function estadoParaHash() {
+    var p = [];
+    // o consolidado é ano vazio; sem marcá-lo o link cairia no ano corrente
+    p.push('ano=' + encodeURIComponent(F.ano || CONSOLIDADO));
+    CAMPOS_URL.forEach(function (k) {
+      if (k !== 'ano' && F[k]) p.push(k + '=' + encodeURIComponent(F[k]));
+    });
+    return '#' + abaAtiva + '?' + p.join('&');
+  }
+
+  function gravarUrl(novaEntrada) {
+    var h = estadoParaHash();
+    if (location.hash === h) return;
+    try {
+      if (novaEntrada) history.pushState(null, '', h);
+      else history.replaceState(null, '', h);
+    } catch (e) { location.hash = h; }   // file:// em navegador antigo
+  }
+
+  function lerHash() {
+    var bruto = location.hash.slice(1);
+    var i = bruto.indexOf('?');
+    var filtros = {};
+    (i < 0 ? '' : bruto.slice(i + 1)).split('&').forEach(function (par) {
+      var j = par.indexOf('=');
+      if (j < 0) return;
+      var k = par.slice(0, j);
+      if (CAMPOS_URL.indexOf(k) >= 0) filtros[k] = decodeURIComponent(par.slice(j + 1));
+    });
+    return { aba: (i < 0 ? bruto : bruto.slice(0, i)) || '', filtros: filtros };
+  }
+
+  function abaValida(nome) {
+    return botoes.some(function (b) { return b.getAttribute('data-aba') === nome && !b.hidden; });
+  }
+
+  /** Aplica um estado vindo da URL: carregamento inicial ou botão Voltar. */
+  function aplicarEstado(est) {
+    var pedido = est.filtros.ano;
+    F = {
+      ano: pedido === CONSOLIDADO ? ''
+        : (pedido && ANOS.indexOf(pedido) >= 0 ? pedido : anoInicial()),
+      mes: '', pc: '', mun: '', esc: '', cult: '', tec: ''
+    };
+    CAMPOS_URL.forEach(function (k) {
+      if (k !== 'ano' && est.filtros[k]) F[k] = est.filtros[k];
+    });
+    pag = 1;
+    popularFiltros();
+    sincronizarAno();
+    invalidar();
+    abrirAba(abaValida(est.aba) ? est.aba : 'geral', { semUrl: true });
   }
 
   /* -------------------------------------------------------------------- abas */
   var botoes = [];
-  function abrirAba(nome) {
+  function abrirAba(nome, opc) {
+    opc = opc || {};
+    abaAtiva = nome;
     botoes.forEach(function (b) {
       var ativa = b.getAttribute('data-aba') === nome;
       b.classList.toggle('ativa', ativa);
+      b.setAttribute('aria-selected', ativa ? 'true' : 'false');
+      // roving tabindex: o Tab entra no conjunto de abas por uma só, e as
+      // setas andam entre elas — é o que um leitor de tela espera de abas
+      b.tabIndex = ativa ? 0 : -1;
       if (ativa && b.scrollIntoView) b.scrollIntoView({ inline: 'center', block: 'nearest' });
     });
     document.querySelectorAll('.aba-conteudo').forEach(function (c) {
       c.classList.toggle('ativa', c.getAttribute('data-aba') === nome);
     });
-    if (location.hash.slice(1) !== nome) history.replaceState(null, '', '#' + nome);
-    render();
+    if (!opc.semUrl) gravarUrl(true);
+    // desenha só se esta aba está desatualizada; voltar a uma já pronta é grátis
+    if (TODOS.length && SUJAS[nome] !== false) render();
     window.scrollTo(0, 0);
+  }
+
+  /** Setas, Home e End percorrem as abas, como manda o padrão de tablist. */
+  function ligarTeclasAbas() {
+    el('abas').addEventListener('keydown', function (e) {
+      var visiveis = botoes.filter(function (b) { return !b.hidden; });
+      var i = visiveis.indexOf(document.activeElement);
+      if (i < 0) return;
+      var alvo = e.key === 'ArrowRight' ? visiveis[(i + 1) % visiveis.length]
+        : e.key === 'ArrowLeft' ? visiveis[(i - 1 + visiveis.length) % visiveis.length]
+          : e.key === 'Home' ? visiveis[0]
+            : e.key === 'End' ? visiveis[visiveis.length - 1] : null;
+      if (!alvo) return;
+      e.preventDefault();
+      abrirAba(alvo.getAttribute('data-aba'));
+      alvo.focus();
+    });
   }
 
   /* ============================== ADMIN: senha e carga de planilha ========= */
   function ehAdmin() {
-    try { return sessionStorage.getItem('seagri_admin') === '1'; } catch (e) { return false; }
+    try {
+      var v = sessionStorage.getItem('seagri_admin');
+      return v === '1' || v === 'local';
+    } catch (e) { return false; }
   }
   function aplicarAdmin() {
     var on = ehAdmin();
+    try { ADMIN_LOCAL = sessionStorage.getItem('seagri_admin') === 'local'; } catch (e) { /* privado */ }
     el('abaAdmin').hidden = !on;
     el('adminBtn').innerHTML = on ? '&#9989;<span>Admin (sair)</span>' : '&#128274;<span>Admin</span>';
+    // sem servidor não há o que publicar: o botão sai de cena em vez de falhar
+    var aplicar = el('upAplicar');
+    if (aplicar) {
+      aplicar.hidden = ADMIN_LOCAL;
+      aplicar.title = ADMIN_LOCAL ? 'Indisponível sem o servidor PHP' : '';
+    }
     if (!on && document.querySelector('.aba.ativa') &&
       document.querySelector('.aba.ativa').getAttribute('data-aba') === 'admin') abrirAba('geral');
     if (window._sidebarRefreshAdmin) window._sidebarRefreshAdmin();
@@ -1786,15 +2164,39 @@
     el('admOverlay').classList.add('show');
     setTimeout(function () { el('admSenha').focus(); }, 60);
   }
+  /** Quem confere a senha é o servidor: não há hash nenhum neste arquivo para
+      alguém baixar e quebrar offline. A senha vai por POST e o PHP responde
+      só ok/não — e demora de propósito a cada erro.
+
+      Sem PHP (GitHub Pages, abrir o arquivo direto) a aba abre em modo local:
+      lá só dá para carregar uma planilha no próprio navegador, que não altera
+      nada para ninguém. Publicar continua exigindo a senha no servidor. */
+  var ADMIN_LOCAL = false;   // liberado sem servidor: publicar fica desativado
+
   function entrar() {
-    sha256(el('admSenha').value).then(function (h) {
-      if (h !== HASH_ADMIN) {
+    var senha = el('admSenha').value;
+    el('admErro').textContent = '';
+    el('admOk').disabled = true;
+    fetch('../salvar_mecanizacao.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'login', senha: senha })
+    }).then(function (r) {
+      if (r.status === 403) return { ok: false, semServidor: false };
+      if (!r.ok) throw new Error('servidor indisponível');
+      return r.json().then(function (j) { return { ok: !!j.ok, semServidor: false }; });
+    }).catch(function () {
+      return { ok: false, semServidor: true };   // PHP ausente ou fora do ar
+    }).then(function (res) {
+      el('admOk').disabled = false;
+      if (!res.ok && !res.semServidor) {
         el('admErro').textContent = 'Senha incorreta. Tente novamente.';
         el('admSenha').value = '';
         el('admSenha').focus();
         return;
       }
-      try { sessionStorage.setItem('seagri_admin', '1'); } catch (e) { /* modo privado */ }
+      ADMIN_LOCAL = res.semServidor;
+      try { sessionStorage.setItem('seagri_admin', res.semServidor ? 'local' : '1'); } catch (e) { /* privado */ }
       el('admOverlay').classList.remove('show');
       aplicarAdmin();
       abrirAba('admin');
@@ -1866,7 +2268,10 @@
         ['Registros no painel agora', G.num(antes)],
         ['Registros na planilha enviada', G.num(depois)],
         ['Diferença', (novos > 0 ? '+' : '') + G.num(novos) + (novos < 0 ? ' (a planilha tem menos linhas!)' : '')],
-        ['Produtores distintos', G.num(pacote.meta.produtores || 0)],
+        // é a contagem de CPFs válidos que importar.js sabe fazer; o painel
+        // conta produtores por nome, então rotular "produtores" aqui daria
+        // dois números diferentes para a mesma palavra
+        ['CPFs distintos', G.num(pacote.meta.produtores || 0)],
         ['Período de inserção', dataBR(pacote.meta.periodo[0]) + ' a ' + dataBR(pacote.meta.periodo[1])],
         ['Sem CPF válido', G.num(q.cpf_invalido || 0)]
       ].map(function (i) {
@@ -1898,7 +2303,10 @@
     return h.registros.filter(function (r) { return !noPacote.has(exercicioFonte(r)); });
   }
 
-  function usarPacote(pacote, fonte) {
+  var PACOTE = null;   // pacote do ano corrente, guardado para remontar com o histórico
+
+  function usarPacote(pacote, fonte, manterSelecao) {
+    PACOTE = pacote;
     // ordenado pela data do serviço, que é a referência do painel
     TODOS = historico(pacote).concat(pacote.registros)
       .sort(function (a, b) {
@@ -1915,14 +2323,44 @@
     ORDEM.sistema = Array.from(m.keys()).sort(function (a, b) { return m.get(b) - m.get(a); });
 
     ANOS = unicos(TODOS.map(anoDe)).reverse();   // do mais recente para o mais antigo
-    F.ano = anoInicial();
+    // ao remontar com o histórico que chegou depois, a escolha do usuário fica
+    // de pé; ano vazio é o consolidado e também é preservado
+    if (!manterSelecao || (F.ano && ANOS.indexOf(F.ano) < 0)) F.ano = anoInicial();
     montarSeletorAno();
     sincronizarAno();
     popularFiltros();
+    invalidar();
+    // dependem só de TODOS/META: saem do caminho quente e rodam ao trocar a base
+    nota();
+    fonteDados();
+  }
+
+  /* --------------------------------------------- histórico em segundo plano */
+  /* São 1,3 MB de exercícios encerrados. O painel sempre abre no ano corrente,
+     e esse arquivo só interessa a quem escolhe 2023–2025 ou "Geral" — carregá-lo
+     junto atrasava o primeiro desenho para todo mundo. Agora entra depois, e o
+     seletor de período ganha os anos antigos quando ele chega. */
+  function carregarHistorico() {
+    if (window.DADOS_MECANIZACAO_HISTORICO) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      var s = document.createElement('script');
+      s.src = '../js/dados-mecanizacao-historico.js' + (VERSAO ? '?v=' + VERSAO : '');
+      s.async = true;
+      s.onload = function () { resolve(true); };
+      s.onerror = function () { resolve(false); };   // segue só com o ano corrente
+      document.body.appendChild(s);
+    });
   }
 
   function publicar() {
     if (!pendente) return;
+    if (ADMIN_LOCAL) {
+      return aviso('upStatus', 'erro', 'Sem servidor PHP não há como publicar. ' +
+        'Use <b>Usar só neste navegador</b> para conferir os dados.');
+    }
+    /* Reconfirma a senha antes de sobrescrever a base de todo mundo: a sessão
+       admin não é autorização para gravar, é só o que abre esta aba. Quem
+       decide continua sendo o PHP, que confere a senha de novo. */
     var senha = prompt('Confirme a senha de administrador para publicar:');
     if (senha == null) return;
     aviso('upStatus', 'carregando', 'Publicando no servidor…');
@@ -2039,14 +2477,27 @@
   ligarFiltros();
   ligarAdmin();
   aplicarAdmin();
-  el('busca').addEventListener('input', function () { pag = 1; tabela(filtrar()); });
-  el('pagAnt').addEventListener('click', function () { pag--; tabela(filtrar()); });
-  el('pagProx').addEventListener('click', function () { pag++; tabela(filtrar()); });
-  /* busca do produtor: filtra a cada tecla e abre a lista de sugestões */
-  el('buscaProd').addEventListener('input', function () {
-    montarSugestoes(true);
-    ficha(filtrar());
+  ligarOrdenacao();
+  pintarCabecalhoOrdem();
+  POR_PAG = +lerPref(CHAVE_POR_PAG, 25) || 25;
+  if ([25, 50, 100, 250].indexOf(POR_PAG) < 0) POR_PAG = 25;
+  el('pagTam').value = String(POR_PAG);
+  /* contexto().D em vez de filtrar(): a seleção já está calculada e memoizada;
+     refazê-la a cada tecla percorria os 3.479 registros de novo */
+  el('busca').addEventListener('input', atrasar(function () { pag = 1; tabela(contexto().D); }, 160));
+  el('pagAnt').addEventListener('click', function () { pag--; tabela(contexto().D); });
+  el('pagProx').addEventListener('click', function () { pag++; tabela(contexto().D); });
+  el('pagTam').addEventListener('change', function () {
+    POR_PAG = +this.value || 25;
+    pag = 1;
+    tabela(contexto().D);
+    try { localStorage.setItem(CHAVE_POR_PAG, String(POR_PAG)); } catch (e) { /* modo privado */ }
   });
+  /* busca do produtor: filtra a cada tecla e abre a lista de sugestões */
+  el('buscaProd').addEventListener('input', atrasar(function () {
+    montarSugestoes(true);
+    ficha(contexto().D);
+  }, 160));
   el('buscaProd').addEventListener('focus', function () { montarSugestoes(true); });
   el('buscaProd').addEventListener('keydown', function (e) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -2096,9 +2547,14 @@
     return function () {
       ajustarAlturaUtil();
       clearTimeout(t);
-      t = setTimeout(render, 220);
+      t = setTimeout(function () { invalidar(); render(); }, 220);
     };
   })());
+  // Voltar/Avançar do navegador percorrem as seleções, não só as abas
+  window.addEventListener('popstate', function () {
+    if (TODOS.length) aplicarEstado(lerHash());
+  });
+  ligarTeclasAbas();
 
   carregarDados().then(function (res) {
     if (!res.pacote || !res.pacote.registros) {
@@ -2107,10 +2563,16 @@
       return;
     }
     usarPacote(res.pacote, res.fonte);
-    var inicial = location.hash.slice(1);
-    var valida = botoes.some(function (b) {
-      return b.getAttribute('data-aba') === inicial && !b.hidden;
+    aplicarEstado(lerHash());
+    gravarUrl(false);   // deixa a URL refletir a seleção já no primeiro desenho
+
+    /* Só agora o histórico: o painel já está desenhado e utilizável. Ao chegar,
+       a base é remontada mantendo a seleção e o seletor de período ganha os
+       exercícios encerrados. */
+    carregarHistorico().then(function (ok) {
+      if (!ok || !PACOTE) return;
+      usarPacote(PACOTE, FONTE, true);
+      render();
     });
-    abrirAba(valida ? inicial : 'geral');
   });
 })();

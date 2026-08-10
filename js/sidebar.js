@@ -89,7 +89,10 @@
 
   // Admin visibility — Chamados e Contatos só aparecem com senha
   function refreshAdmin(){
-    var isAdmin = sessionStorage.getItem('seagri_admin') === '1';
+    // try/catch: em modo privado o acesso ao sessionStorage lança, e sem isso a
+    // exceção interrompia o script antes de exportar _sidebarRefreshAdmin
+    var isAdmin = false;
+    try { isAdmin = sessionStorage.getItem('seagri_admin') === '1'; } catch(e){ /* modo privado */ }
     var c = document.getElementById('sidebarLinkContatos');
     if(c) c.style.display = isAdmin ? '' : 'none';
     var ch = document.getElementById('sidebarLinkChamados');

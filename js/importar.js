@@ -114,7 +114,7 @@
   }
 
   /* ======================== normalizações (espelho do script Python) ======= */
-  function semAcento(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function semAcento(s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   function txt(v) {
     if (v == null) return '';
     if (typeof v === 'number' && Number.isInteger(v)) v = String(v);
@@ -354,9 +354,9 @@
       ]).then(function (partes) {
         var wb = partes[0], rels = partes[1], shared = lerSharedStrings(partes[2]);
         // atributos lidos separadamente: a ordem varia conforme quem gerou o arquivo
-        var re = /<sheet[^>]*>/g, m, rid = null, nomes = [];
+        var re = /<sheet\b[^>]*>/g, m, rid = null, nomes = [];
         while ((m = re.exec(wb))) {
-          var nome = desescapar((m[0].match(/name="([^"]*)"/) || [])[1] || '');
+          var nome = desescapar((m[0].match(/\bname="([^"]*)"/) || [])[1] || '');
           var id = (m[0].match(/r:id="([^"]*)"/) || [])[1];
           nomes.push(nome);
           if (nome.toLowerCase() === ABA && id) rid = id;
