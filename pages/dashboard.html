@@ -10,8 +10,8 @@
 <meta property="og:description" content="Painel de acompanhamento das vistorias de mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem da SEAGRI/AC.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="../assets/brasao.png">
-<link rel="stylesheet" href="../css/base.css?v=2026080901">
-<link rel="stylesheet" href="../css/dashboard.css?v=2026080901">
+<link rel="stylesheet" href="../css/base.css?v=2026080906">
+<link rel="stylesheet" href="../css/dashboard.css?v=2026080906">
 <script>
   /* aplica o tema antes da pintura para não piscar branco */
   (function () {
@@ -60,7 +60,7 @@
   <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
 </nav>
 <button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
-<script src="../js/sidebar.js?v=2026080901"></script>
+<script src="../js/sidebar.js?v=2026080906"></script>
 <script>
 /* no painel a barra lateral começa recolhida — maximiza a área de dados */
 (function(){
@@ -131,13 +131,15 @@
   <section class="filtros" aria-label="Filtros">
     <!-- per&iacute;odo: recorte mais amplo do painel, por isso encabe&ccedil;a os filtros.
          As op&ccedil;&otilde;es s&atilde;o montadas por js/dashboard.js a partir dos anos da base. -->
+    <!-- Per&iacute;odo e M&ecirc;s aceitam mais de um valor: s&atilde;o montados por js/dashboard.js
+         como caixas de marca&ccedil;&atilde;o, n&atilde;o como <select>. Nada marcado = tudo. -->
     <div class="filtro" id="filtroExercicio" hidden>
-      <label for="fExercicio">Per&iacute;odo</label>
-      <select id="fExercicio"></select>
+      <span class="filtro-rot" id="rotExercicio">Per&iacute;odo</span>
+      <div class="multi" id="fExercicio"></div>
     </div>
     <div class="filtro">
-      <label for="fMes">M&ecirc;s da vistoria</label>
-      <select id="fMes"></select>
+      <span class="filtro-rot" id="rotMes">M&ecirc;s da vistoria</span>
+      <div class="multi" id="fMes"></div>
     </div>
     <div class="filtro">
       <label for="fPonto">Servi&ccedil;o</label>
@@ -572,6 +574,10 @@
              A leitura acontece no seu navegador; s&oacute; os dados j&aacute; tratados v&atilde;o para o servidor.</p>
         </div></div>
 
+        <!-- preenchido por dashboard.js quando o painel abre sem PHP: sem ele
+             o formul&aacute;rio abaixo parece inteiro, mas nada pode ser publicado -->
+        <div id="upModoLocal"></div>
+
         <div class="upload" id="upZona">
           <input type="file" id="upArquivo" accept=".xlsx" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -612,10 +618,11 @@
                 <code>js/dados-mecanizacao-historico.js</code> e n&atilde;o s&atilde;o afetados. Para refaz&ecirc;-los,
                 rode <code>python tools/gerar_historico_mecanizacao.py</code>.</li>
           </ol>
-          <p class="ajuda-aviso"><b>Aten&ccedil;&atilde;o:</b> a data usada em todos os indicadores e gr&aacute;ficos &eacute; a
-             <b>Data da Vistoria</b> &mdash; o que vale &eacute; quando o servi&ccedil;o foi feito. Quando essa data &eacute;
-             imposs&iacute;vel (ano digitado errado ou data futura), o registro entra pela data de lan&ccedil;amento e
-             aparece destacado na listagem.</p>
+          <p class="ajuda-aviso"><b>Aten&ccedil;&atilde;o:</b> o <b>exerc&iacute;cio</b> de cada linha &eacute; o da planilha em que ela
+             foi lan&ccedil;ada &mdash; por isso o total de um per&iacute;odo bate com o SOMA do Excel daquela planilha, mesmo
+             quando a vistoria foi feita no ano anterior. J&aacute; o <b>m&ecirc;s</b> nos gr&aacute;ficos &eacute; o da
+             <b>Data da Vistoria</b>; quando essa data &eacute; imposs&iacute;vel (ano digitado errado ou data futura),
+             vale a data de lan&ccedil;amento e a linha aparece destacada na listagem.</p>
         </div>
       </section>
     </div>
@@ -656,9 +663,9 @@
 <!-- dados-mecanizacao-historico.js (1,3 MB, exercícios encerrados) NÃO entra
      aqui de propósito: o painel abre no ano corrente e js/dashboard.js o busca
      em segundo plano, depois do primeiro desenho. -->
-<script src="../js/dados-mecanizacao.js?v=2026080901"></script>
-<script src="../js/graficos.js?v=2026080901"></script>
-<script src="../js/importar.js?v=2026080901"></script>
-<script src="../js/dashboard.js?v=2026080901"></script>
+<script src="../js/dados-mecanizacao.js?v=2026080906"></script>
+<script src="../js/graficos.js?v=2026080906"></script>
+<script src="../js/importar.js?v=2026080906"></script>
+<script src="../js/dashboard.js?v=2026080906"></script>
 </body>
 </html>

@@ -10,11 +10,13 @@
    e assim publicar uma planilha nova do ano corrente não apaga o histórico.
 
    Regras do painel:
-   - a data de referência de TODOS os filtros, contadores e gráficos é a da
-     VISTORIA (quando o serviço foi feito) sempre que ela é plausível; quando
-     não é — ano digitado errado, data futura — o registro entra pela data de
-     INSERÇÃO (coluna "Carimbo de data/hora") e a listagem marca a célula.
-     Ver dataRef()/vistoriaValida() logo abaixo;
+   - o EXERCÍCIO de um registro é o da planilha em que ele foi lançado, e é por
+     ele que o filtro "Período" recorta. Assim o total de cada ano bate com o
+     SOMA do Excel daquela planilha;
+   - dentro do exercício, o MÊS é o da VISTORIA (quando o serviço foi feito)
+     sempre que ela é plausível; quando não é — ano digitado errado, data
+     futura — vale a data de INSERÇÃO ("Carimbo de data/hora") e a listagem
+     marca a célula. Ver anoDe()/dataRef()/vistoriaValida() logo abaixo;
    - mecanização se mede em hectares; açudagem, em horas de máquina e nº de tanques;
    - todo gráfico aceita mais de um tipo de visualização, coerente com o dado;
    - clicar numa marca filtra e leva para a aba correspondente;
@@ -57,14 +59,17 @@
   var ORDEM = { tipo: [MEC, ACU], sistema: [] };
 
   /* ------------------------------------------------- data de referência ----
-     O que vale é QUANDO O SERVIÇO FOI FEITO: a Data da Vistoria. Uma vistoria
-     de dezembro lançada em janeiro pertence ao exercício de dezembro.
+     O EXERCÍCIO de um registro é o da planilha em que ele foi lançado, não o
+     da Data da Vistoria. É o que faz o total do painel bater com o SOMA do
+     Excel: a planilha de 2026 tem 632 linhas somando 4.667,4 ha, e as 60 cujo
+     serviço foi feito em 2025 continuam contando em 2026, porque é lá que
+     estão. Antes elas migravam para 2025 e o painel mostrava 4.231,0 ha —
+     correto pela data do serviço, mas impossível de conferir contra a planilha.
 
-     Só que a Data da Vistoria tem digitação errada: 41 registros trazem anos
-     como 1949 ou 0023 (data de nascimento digitada no lugar) e 26 trazem data
-     futura. Por isso ela é aceita apenas quando é plausível — ocorreu até a
-     data de lançamento e no máximo 18 meses antes. Nos 68 casos restantes o
-     painel cai para a data de inserção, e a listagem marca a célula. */
+     Dentro do exercício, o MÊS ainda é o do serviço: a Data da Vistoria quando
+     é plausível (ocorreu até o lançamento e no máximo 18 meses antes), senão a
+     data de lançamento. Só que ela tem digitação errada — anos como 1949 ou
+     0023, datas futuras —, e nesses casos a listagem marca a célula. */
   var JANELA_VISTORIA = 18;   // meses
 
   function difMeses(a, b) {
@@ -77,14 +82,19 @@
     return difMeses(r.dv, r.d) <= JANELA_VISTORIA;      // ou velho demais
   }
 
-  /** Data que o painel usa para tudo: filtros, séries, contadores. */
+  /** Data do serviço. Manda no mês, na ordenação e no período exibido — não no
+      exercício, que é o da planilha (ver anoDe). */
   function dataRef(r) { return vistoriaValida(r) ? r.dv : r.d; }
 
-  /** Exercício do registro. Com vistoria confiável manda ela; sem ela, vale o
-      ano fechado da planilha (histórico) ou o ano do lançamento. */
-  function anoDe(r) {
-    return vistoriaValida(r) ? r.dv.slice(0, 4) : (r.ex || r.d.slice(0, 4));
-  }
+  /** Exercício: a planilha a que a linha pertence. No pacote do ano corrente
+      `ex` é o ano do lançamento; no histórico vem da coluna "Ano". */
+  function anoDe(r) { return r.ex || r.d.slice(0, 4); }
+
+  /** Mês do registro dentro do seu exercício ("2026-11"). O ano vem do
+      EXERCÍCIO, não da vistoria: senão um serviço de novembro/2025 lançado na
+      planilha de 2026 contaria como um mês à parte de novembro/2026, e o
+      contador "Meses com vistoria" passaria dos 12 dentro de um único ano. */
+  function mesChave(r) { return anoDe(r) + '-' + dataRef(r).slice(5, 7); }
 
   /* -------------------------------------------------------------- utilidades */
   function el(id) { return document.getElementById(id); }
@@ -173,7 +183,11 @@
   function tagServico(pc) {
     return pc === MEC ? 'tag-mec' : pc === ACU ? 'tag-acu' : 'tag-ni';
   }
-  function mesRot(ym) { return MESES[+ym.slice(5, 7) - 1] + '/' + ym.slice(2, 4); }
+  /** Rótulo de mês. Sem o ano: dentro de um exercício o ano já está dito no
+      seletor de período, e imprimi-lo aqui mentiria nas vistorias feitas no ano
+      anterior — um serviço de dezembro/2025 lançado na planilha de 2026 saía
+      como "dez/26", um mês que ainda não aconteceu. */
+  function mesRot(ym) { return MESES[+ym.slice(5, 7) - 1]; }
   function rotParaMes(rot) {
     var i = MESES.indexOf(String(rot).split('/')[0]);
     return i < 0 ? '' : String(i + 1).padStart(2, '0');
@@ -237,7 +251,137 @@
   }
 
   /* ---------------------------------------------------------------- filtros */
-  var F = { ano: '', mes: '', pc: '', mun: '', esc: '', cult: '', tec: '' };
+  /* ano e mes são LISTAS: aceitam mais de um valor ("2025 e 2026", "jan a mar").
+     Lista vazia é "sem recorte" — no período isso significa o consolidado.
+     Os demais filtros continuam de valor único. */
+  var F = { ano: [], mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
+
+  /* --------------------------------------------- caixa de seleção múltipla --
+     Um botão que abre uma lista de caixas de marcação. Ver .multi no CSS para
+     o porquê de não ser um <select multiple>.
+     MULTI[id] = { itens:[{v,rot}], sel:[], vazio, plural, rotulo, aoMudar } */
+  var MULTI = {};
+
+  function resumoMulti(cfg) {
+    if (!cfg.sel.length) return cfg.vazio;
+    if (cfg.sel.length === 1) {
+      var achado = cfg.itens.filter(function (i) { return i.v === cfg.sel[0]; })[0];
+      return achado ? achado.rot : cfg.sel[0];
+    }
+    return cfg.sel.length + ' ' + cfg.plural;
+  }
+
+  /** Redesenha a caixa inteira. Só quando a LISTA muda (troca de base, outro
+      filtro mexeu nas opções) — marcar um item não passa por aqui, senão o
+      checkbox recém-clicado sumiria debaixo do cursor e o foco se perderia. */
+  function desenharMulti(id) {
+    var cfg = MULTI[id], caixa = el(id);
+    if (!cfg || !caixa) return;
+    var aberto = caixa.getAttribute('data-aberto') === '1';
+    /* Marcar um mês refaz as listas de todos os filtros, e isso passa por aqui:
+       sem devolver o foco, quem navega por teclado era jogado para o começo da
+       página a cada item marcado. */
+    var focado = document.activeElement;
+    var vFocado = (focado && caixa.contains(focado) && focado.type === 'checkbox')
+      ? focado.value : null;
+    caixa.innerHTML =
+      '<button type="button" class="multi-btn" aria-haspopup="true" aria-expanded="' +
+        (aberto ? 'true' : 'false') + '" aria-labelledby="' + cfg.rotulo + ' ' + id + 'Txt">' +
+        '<span class="multi-txt" id="' + id + 'Txt">' + G.esc(resumoMulti(cfg)) + '</span>' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+        'stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+      '</button>' +
+      '<div class="multi-lista"' + (aberto ? '' : ' hidden') + '>' +
+        cfg.itens.map(function (i) {
+          return '<label class="multi-item"><input type="checkbox" value="' + G.esc(i.v) + '"' +
+            (cfg.sel.indexOf(i.v) >= 0 ? ' checked' : '') + '>' + G.esc(i.rot) + '</label>';
+        }).join('') +
+        '<button type="button" class="btn multi-limpar"' + (cfg.sel.length ? '' : ' hidden') + '>' +
+        G.esc(cfg.vazio) + '</button>' +
+      '</div>';
+    if (vFocado != null) {
+      var volta = caixa.querySelector('input[value="' + vFocado.replace(/"/g, '\\"') + '"]');
+      if (volta) volta.focus();
+    }
+  }
+
+  /** Só o que muda ao marcar/desmarcar: resumo do botão e o botão de limpar. */
+  function atualizarResumoMulti(id) {
+    var cfg = MULTI[id], caixa = el(id);
+    if (!cfg || !caixa) return;
+    var txt = el(id + 'Txt'), limpar = caixa.querySelector('.multi-limpar');
+    if (txt) txt.textContent = resumoMulti(cfg);
+    if (limpar) limpar.hidden = !cfg.sel.length;
+  }
+
+  function abrirMulti(id, on) {
+    var caixa = el(id);
+    if (!caixa) return;
+    var btn = caixa.querySelector('.multi-btn'), lista = caixa.querySelector('.multi-lista');
+    caixa.setAttribute('data-aberto', on ? '1' : '0');
+    if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (lista) lista.hidden = !on;
+  }
+
+  function fecharMultis(exceto) {
+    Object.keys(MULTI).forEach(function (id) { if (id !== exceto) abrirMulti(id, false); });
+  }
+
+  /** Liga os eventos uma vez só: o conteúdo é redesenhado, o container não. */
+  function ligarMulti(id) {
+    var caixa = el(id);
+    if (!caixa || caixa.getAttribute('data-ligado') === '1') return;
+    caixa.setAttribute('data-ligado', '1');
+
+    caixa.addEventListener('click', function (e) {
+      if (e.target.closest('.multi-btn')) {
+        var abrindo = caixa.getAttribute('data-aberto') !== '1';
+        fecharMultis(id);
+        abrirMulti(id, abrindo);
+        return;
+      }
+      if (e.target.closest('.multi-limpar')) {
+        MULTI[id].sel = [];
+        desenharMulti(id);
+        abrirMulti(id, true);
+        MULTI[id].aoMudar([]);
+      }
+    });
+
+    caixa.addEventListener('change', function (e) {
+      var cx = e.target;
+      if (!cx || cx.type !== 'checkbox') return;
+      var cfg = MULTI[id];
+      var marcados = {};
+      cfg.sel.forEach(function (v) { marcados[v] = true; });
+      if (cx.checked) marcados[cx.value] = true; else delete marcados[cx.value];
+      // reordena pela ordem da lista: a seleção vira rótulo e URL, e "2026,2025"
+      // saindo em ordem de clique deixaria links iguais com textos diferentes
+      cfg.sel = cfg.itens.map(function (i) { return i.v; })
+        .filter(function (v) { return marcados[v]; });
+      atualizarResumoMulti(id);
+      cfg.aoMudar(cfg.sel.slice());
+    });
+
+    caixa.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      abrirMulti(id, false);
+      var btn = caixa.querySelector('.multi-btn');
+      if (btn) btn.focus();
+    });
+  }
+
+  /** Registra/atualiza uma caixa. `itens` e `sel` chegam prontos de quem chama. */
+  function montarMulti(id, cfg) {
+    MULTI[id] = cfg;
+    ligarMulti(id);
+    desenharMulti(id);
+  }
+
+  // clique fora fecha as listas abertas
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.multi')) fecharMultis(null);
+  });
 
   /** Monta um select. O valor escolhido entra na lista mesmo que os outros
       filtros o tenham deixado sem registros — senão a seleção sumiria sozinha
@@ -260,10 +404,22 @@
     var meses = Array.from(new Set(filtrar('mes').map(function (r) {
       return dataRef(r).slice(5, 7);
     }))).sort();
-    if (F.mes && meses.indexOf(F.mes) < 0) meses = meses.concat([F.mes]).sort();
-    el('fMes').innerHTML = '<option value="">Todos os meses</option>' + meses.map(function (m) {
-      return '<option value="' + m + '">' + MESES[+m - 1].charAt(0).toUpperCase() + MESES[+m - 1].slice(1) + '</option>';
-    }).join('');
+    // os meses já marcados ficam na lista mesmo sem registros: sumir da lista
+    // enquanto continuam valendo no filtro seria mentir sobre a seleção
+    F.mes.forEach(function (m) { if (meses.indexOf(m) < 0) meses.push(m); });
+    meses.sort();
+    montarMulti('fMes', {
+      itens: meses.map(function (m) {
+        return { v: m, rot: MESES[+m - 1].charAt(0).toUpperCase() + MESES[+m - 1].slice(1) };
+      }),
+      sel: F.mes.slice(), vazio: 'Todos os meses', plural: 'meses', rotulo: 'rotMes',
+      aoMudar: function (sel) {
+        F.mes = sel;
+        pag = 1;
+        popularFiltros();   // as outras listas se ajustam à nova escolha
+        atualizar();
+      }
+    });
 
     preencher('fPonto', unicos(filtrar('pc').map(function (r) { return r.pc; })), 'Todos os serviços', F.pc);
     preencher('fMun', unicos(filtrar('mun').map(function (r) { return r.mun; })), 'Todos os municípios', F.mun);
@@ -276,8 +432,8 @@
   }
 
   function ligarFiltros() {
-    el('fExercicio').addEventListener('change', function () { selecionarAno(this.value); });
-    ['fMes|mes', 'fPonto|pc', 'fMun|mun', 'fEsc|esc', 'fCult|cult', 'fTec|tec'].forEach(function (par) {
+    // fExercicio e fMes são caixas de marcação: ligam-se em montarMulti()
+    ['fPonto|pc', 'fMun|mun', 'fEsc|esc', 'fCult|cult', 'fTec|tec'].forEach(function (par) {
       var p = par.split('|');
       el(p[0]).addEventListener('change', function () {
         F[p[1]] = this.value;
@@ -288,7 +444,7 @@
     });
     el('btnLimpar').addEventListener('click', function () {
       // o exercício não é um filtro comum: continua sendo o do período escolhido
-      F = { ano: F.ano, mes: '', pc: '', mun: '', esc: '', cult: '', tec: '' };
+      F = { ano: F.ano, mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
       el('busca').value = '';
       pag = 1;
       popularFiltros();
@@ -297,7 +453,7 @@
   }
 
   function sincronizarFiltros() {
-    el('fMes').value = F.mes; el('fPonto').value = F.pc;
+    el('fPonto').value = F.pc;
     el('fMun').value = F.mun; el('fEsc').value = F.esc; el('fCult').value = F.cult;
     el('fTec').value = F.tec;
   }
@@ -305,10 +461,11 @@
   /** Aplica a seleção. `exceto` deixa um filtro de fora — é o que permite
       montar a lista de opções de um campo sem que ele restrinja a si mesmo. */
   function filtrar(exceto, anoAlvo) {
-    var ano = (anoAlvo === undefined) ? F.ano : anoAlvo;
+    // anoAlvo é sempre um exercício só (a comparação com o ano anterior)
+    var anos = (anoAlvo === undefined) ? F.ano : (anoAlvo ? [anoAlvo] : []);
     return TODOS.filter(function (r) {
-      if (ano && anoDe(r) !== ano) return false;
-      if (exceto !== 'mes' && F.mes && dataRef(r).slice(5, 7) !== F.mes) return false;
+      if (anos.length && anos.indexOf(anoDe(r)) < 0) return false;
+      if (exceto !== 'mes' && F.mes.length && F.mes.indexOf(dataRef(r).slice(5, 7)) < 0) return false;
       if (exceto !== 'pc' && F.pc && r.pc !== F.pc) return false;
       if (exceto !== 'mun' && F.mun && r.mun !== F.mun) return false;
       if (exceto !== 'esc' && F.esc && r.esc !== F.esc) return false;
@@ -319,46 +476,49 @@
   }
 
   /* ----------------------------------------------------- seletor de período */
-  /** Uma opção por ano encontrado na base, mais o "Geral". Trocar de período
-      não muda a estrutura do painel: as mesmas abas de seção e os mesmos
-      gráficos são redesenhados com o recorte do ano escolhido. */
+  /** Uma caixa por exercício encontrado na base. Nada marcado é o consolidado:
+      não há item "Geral" na lista, ele é o estado de lista vazia — assim marcar
+      2025 e 2026 e depois desmarcar os dois volta ao geral sem passo extra.
+      Trocar de período não muda a estrutura do painel: as mesmas abas e os
+      mesmos gráficos são redesenhados com o novo recorte. */
   function montarSeletorAno() {
-    var caixa = el('filtroExercicio'), sel = el('fExercicio');
-    if (!caixa || !sel) return;
-    // ANOS já vem do mais recente para o mais antigo; "Geral" fecha a lista
-    caixa.hidden = ANOS.length <= 1;
-    sel.innerHTML = ANOS.map(function (a) {
-      return '<option value="' + G.esc(a) + '">' + G.esc(a) + '</option>';
-    }).join('') + (ANOS.length > 1
-      ? '<option value="' + CONSOLIDADO + '">Geral</option>'
-      : '');
+    var caixa = el('filtroExercicio');
+    if (!caixa || !el('fExercicio')) return;
+    caixa.hidden = ANOS.length <= 1;   // ANOS vem do mais recente para o mais antigo
+    montarMulti('fExercicio', {
+      itens: ANOS.map(function (a) { return { v: a, rot: a }; }),
+      sel: F.ano.slice(), vazio: 'Geral', plural: 'exercícios', rotulo: 'rotExercicio',
+      aoMudar: selecionarAnos
+    });
   }
 
   /** Período coberto pela seleção, para títulos e legendas. */
   function rotuloAno() {
-    if (F.ano) return F.ano;
+    if (F.ano.length) return F.ano.slice().sort().join(', ');
     var anos = ANOS.slice().sort();
     return anos.length ? anos[0] + ' a ' + anos[anos.length - 1] : '';
   }
 
   function sincronizarAno() {
-    var sel = el('fExercicio');
-    if (sel) sel.value = F.ano || CONSOLIDADO;
+    var cfg = MULTI.fExercicio;
+    if (cfg) { cfg.sel = F.ano.slice(); desenharMulti('fExercicio'); }
     var tit = el('tituloPainel');
     if (tit) {
       tit.innerHTML = 'Painel da Mecaniza&ccedil;&atilde;o &mdash; ' +
-        (F.ano ? F.ano : 'Geral (' + rotuloAno() + ')');
+        (F.ano.length ? G.esc(rotuloAno()) : 'Geral (' + G.esc(rotuloAno()) + ')');
     }
   }
 
   /** Troca o período. Os demais filtros são zerados porque foram escolhidos
-      dentro de outro ano — manter "Cultura = Café" ao pular para 2023 esconde
-      dados sem o usuário perceber.
+      dentro de outro recorte — manter "Cultura = Café" ao pular para 2023
+      esconde dados sem o usuário perceber.
       A escolha vale só para a visita: recarregar volta ao ano corrente. */
-  function selecionarAno(valor) {
-    var novo = (valor === CONSOLIDADO) ? '' : valor;
-    if (novo === F.ano) return;
-    F = { ano: novo, mes: '', pc: '', mun: '', esc: '', cult: '', tec: '' };
+  function selecionarAnos(anos) {
+    // escolha manual cancela os anos pendentes da URL: o histórico pode chegar
+    // depois, e trocar o período debaixo de quem acabou de escolher é pior
+    // do que ignorar o link
+    anoPendenteUrl = [];
+    F = { ano: anos.slice(), mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
     if (el('busca')) el('busca').value = '';
     pag = 1;
     popularFiltros();
@@ -366,9 +526,11 @@
     atualizar();
   }
 
-  /** O painel sempre abre no ano corrente — o mais recente da base. */
-  function anoInicial() {
-    return ANOS[0] || '';   // ANOS vem do mais recente para o mais antigo
+  /** O painel sempre abre no ano corrente — o mais recente da base. Devolve
+      lista para casar com F.ano; base vazia dá lista vazia, e não [''], que
+      seria um exercício inexistente filtrando tudo para fora. */
+  function anosIniciais() {
+    return ANOS.length ? [ANOS[0]] : [];   // ANOS vem do mais recente para o mais antigo
   }
 
   /* ------------------------------- registro de painéis e tipos de gráfico */
@@ -466,9 +628,11 @@
       var ir = irPadrao;
       if (campo === 'mes') {
         // no consolidado o eixo do tempo é o ano: clicar abre aquele exercício
-        if (porAno()) return selecionarAno(rot);
+        if (porAno()) return selecionarAnos([rot]);
         var m = rotParaMes(rot);
-        F.mes = (F.mes === m) ? '' : m;
+        // clicar alterna o mês dentro da seleção: dá para somar meses no gráfico
+        var iM = F.mes.indexOf(m);
+        if (iM < 0) F.mes = F.mes.concat([m]).sort(); else F.mes.splice(iM, 1);
       } else if (campo === 'pc') {
         var ligando = F.pc !== rot;
         F.pc = ligando ? rot : '';
@@ -583,9 +747,12 @@
       é comparar um exercício com o outro.
       Só entram períodos com registro na seleção: período sem dado não vira
       coluna zerada (a queda a zero não significaria nada). */
-  function porAno() { return !F.ano; }
+  /* Com um exercício só, o eixo é o mês. Sem nenhum (consolidado) ou com vários
+     marcados, é o ano — 24 colunas de mês de dois exercícios lado a lado não se
+     leem, e comparar os anos é justamente o motivo de marcar mais de um. */
+  function porAno() { return F.ano.length !== 1; }
 
-  function chaveTempo(r) { return porAno() ? anoDe(r) : dataRef(r).slice(0, 7); }
+  function chaveTempo(r) { return porAno() ? anoDe(r) : mesChave(r); }
 
   function chavesTempo(D) {
     return Array.from(new Set(D.map(chaveTempo))).sort();
@@ -939,7 +1106,7 @@
           sub: 'construídos ou reformados' },
         { rot: 'DAE arrecadada', val: moeda(daeP), cls: 'texto',
           sub: G.num(R.filter(function (r) { return r.dae > 0; }).length) + ' registros com DAE' },
-        { rot: 'Período', val: G.num(new Set(R.map(function (r) { return dataRef(r).slice(0, 7); })).size),
+        { rot: 'Período', val: G.num(new Set(R.map(function (r) { return mesChave(r); })).size),
           sub: 'meses com lançamento' }
       ]);
 
@@ -1081,8 +1248,12 @@
     });
 
     // o período não conta como filtro: ele é o recorte, não um corte dentro dele
-    var ativos = Object.keys(F).filter(function (k) { return k !== 'ano' && F[k]; }).length;
-    var noAno = TODOS.filter(function (r) { return !F.ano || anoDe(r) === F.ano; }).length;
+    var ativos = Object.keys(F).filter(function (k) {
+      return k !== 'ano' && (Array.isArray(F[k]) ? F[k].length : F[k]);
+    }).length;
+    var noAno = TODOS.filter(function (r) {
+      return !F.ano.length || F.ano.indexOf(anoDe(r)) >= 0;
+    }).length;
 
     var contProd = atendimentosPorProdutor(D);
     var nProd = contProd.size;
@@ -1093,7 +1264,7 @@
     var nMun  = nDistintos(D, function (r) { return r.mun; });
     var nAssoc = new Set(D.map(function (r) { return r.assoc; })
       .filter(function (a) { return a && a !== NI; })).size;
-    var nMeses = new Set(D.map(function (r) { return dataRef(r).slice(0, 7); })).size;
+    var nMeses = new Set(D.map(function (r) { return mesChave(r); })).size;
     var dae = soma(D, function (r) { return r.dae; });
     var nComDae  = D.filter(function (r) { return r.dae > 0; }).length;
     var nComForm = D.filter(function (r) { return r.form; }).length;
@@ -1101,10 +1272,11 @@
     var nMulher  = D.filter(function (r) { return r.sexo === 'Feminino'; }).length;
 
     /* ---- comparação com o exercício anterior ------------------------------
-       Só faz sentido com um ano específico escolhido (no "Geral" não há com o
-       que comparar) e quando o ano anterior existe na base. Os demais filtros
-       são mantidos: comparar "Xapuri 2026" com "Xapuri 2025", não com 2025 todo. */
-    var anoAnt = F.ano ? String(+F.ano - 1) : '';
+       Só faz sentido com UM exercício escolhido: no "Geral" não há com o que
+       comparar, e com vários marcados não existe "o ano anterior" — comparar
+       2025+2026 contra 2024 seria dois anos contra um. Os demais filtros são
+       mantidos: comparar "Xapuri 2026" com "Xapuri 2025", não com 2025 todo. */
+    var anoAnt = F.ano.length === 1 ? String(+F.ano[0] - 1) : '';
     var temAnt = !!anoAnt && ANOS.indexOf(anoAnt) >= 0;
     var Dant = temAnt ? filtrar(null, anoAnt) : [];
     var mecAnt = Dant.filter(function (r) { return r.pc === MEC; });
@@ -1175,7 +1347,7 @@
   function linhaResumo(C) {
     var D = C.D;
     el('resumo').innerHTML = '<strong>' + G.num(D.length) + '</strong> de ' + G.num(C.noAno) +
-      ' registros ' + (F.ano ? 'em ' + F.ano : 'no geral (' + rotuloAno() + ')') +
+      ' registros ' + (F.ano.length ? 'em ' + G.esc(rotuloAno()) : 'no geral (' + G.esc(rotuloAno()) + ')') +
       (C.ativos ? ' (' + C.ativos + ' filtro' + (C.ativos > 1 ? 's' : '') +
         ' ativo' + (C.ativos > 1 ? 's' : '') + ')' : '') +
       (D.length ? ' &middot; vistorias de ' + dataBR(dataRef(D[0])) +
@@ -1293,7 +1465,7 @@
         sub: C.daeSub(mec.filter(function (r) { return r.dae > 0; }).length) },
       { rot: 'Escritórios envolvidos', val: G.num(nDistintos(mec, function (r) { return r.esc; })), cls: 'mec',
         ir: 'escritorio', sub: 'com mecanização' },
-      { rot: 'Meses com vistoria', val: G.num(new Set(mec.map(function (r) { return dataRef(r).slice(0, 7); })).size), cls: 'mec',
+      { rot: 'Meses com vistoria', val: G.num(new Set(mec.map(function (r) { return mesChave(r); })).size), cls: 'mec',
         ir: 'registros', sub: 'em ' + rotuloAno() }
     ]);
     serieDe('gSerieMec', mec, function (r) { return r.ha; }, MEC);
@@ -1329,7 +1501,7 @@
       { rot: 'Tanques por vistoria', val: G.num(acu.length ? C.nAc / acu.length : 0, 1), cls: 'acu', sub: 'média por atendimento' },
       { rot: 'Maior serviço', val: G.num(C.maxHrs, 1), un: 'h', cls: 'acu', sub: 'em uma única vistoria' },
       { rot: 'Mais tanques numa vistoria', val: G.num(C.maxAc), cls: 'acu', sub: 'num único atendimento' },
-      { rot: 'Meses com vistoria', val: G.num(new Set(acu.map(function (r) { return dataRef(r).slice(0, 7); })).size), cls: 'acu',
+      { rot: 'Meses com vistoria', val: G.num(new Set(acu.map(function (r) { return mesChave(r); })).size), cls: 'acu',
         ir: 'registros', sub: 'em ' + rotuloAno() },
 
       { _sec: 'Território e arrecadação' },
@@ -2017,10 +2189,11 @@
       (anosHist ? ' Os exercícios encerrados (' + G.esc(anosHist) + ') vêm da aba <code>' +
         G.esc(META_HIST.aba || 'geral') + '</code> da mesma planilha — ' + G.num(META_HIST.registros || 0) +
         ' registros que não mudam mais.' : '') +
-      ' <b>A data de referência do painel é a da vistoria</b> — o que vale é quando o serviço foi feito.' +
+      ' <b>O exercício é o da planilha em que a linha foi lançada</b> — é o que faz cada' +
+      ' período do painel bater com o SOMA do Excel.' +
       '<ul>' +
       '<li>' + G.num(outroAno) + ' registros têm vistoria confiável de um ano e lançamento de outro: ' +
-      'contam no exercício da <em>vistoria</em>, não no do lançamento;</li>' +
+      'contam no exercício do <em>lançamento</em>, e o mês continua sendo o da vistoria;</li>' +
       '<li>' + G.num(semVistoria) + ' registros têm <em>Data da Vistoria</em> impossível ' +
       '(ano digitado errado ou data futura) e entraram pela data de lançamento — ' +
       'aparecem destacados na coluna Vistoria da listagem;</li>' +
@@ -2041,13 +2214,16 @@
      do painel pode ser mandada por link e sobrevive ao F5; antes só a aba ia
      para o hash e recarregar voltava sempre ao ano corrente, sem filtro. */
   var CAMPOS_URL = ['ano', 'mes', 'pc', 'mun', 'esc', 'cult', 'tec'];
+  var CAMPOS_LISTA = ['ano', 'mes'];   // aceitam vários valores, separados por vírgula
 
   function estadoParaHash() {
     var p = [];
-    // o consolidado é ano vazio; sem marcá-lo o link cairia no ano corrente
-    p.push('ano=' + encodeURIComponent(F.ano || CONSOLIDADO));
+    // o consolidado é lista vazia; sem marcá-lo o link cairia no ano corrente
+    p.push('ano=' + encodeURIComponent(F.ano.length ? F.ano.join(',') : CONSOLIDADO));
     CAMPOS_URL.forEach(function (k) {
-      if (k !== 'ano' && F[k]) p.push(k + '=' + encodeURIComponent(F[k]));
+      if (k === 'ano') return;
+      var v = Array.isArray(F[k]) ? F[k].join(',') : F[k];
+      if (v) p.push(k + '=' + encodeURIComponent(v));
     });
     return '#' + abaAtiva + '?' + p.join('&');
   }
@@ -2078,16 +2254,40 @@
     return botoes.some(function (b) { return b.getAttribute('data-aba') === nome && !b.hidden; });
   }
 
+  /* Anos pedidos na URL que ainda não existem na base. Os exercícios encerrados
+     vêm de dados-mecanizacao-historico.js, carregado depois do primeiro
+     desenho: quando a URL é lida, ANOS só tem o ano corrente, e um link para
+     #geral?ano=2025 caía calado em 2026 — o painel abria no ano errado sem
+     nenhum sinal. Guardamos o pedido e o aplicamos quando o histórico chegar. */
+  var anoPendenteUrl = [];
+
+  function listaDaUrl(v) {
+    return String(v || '').split(',').map(function (s) { return s.trim(); })
+      .filter(function (s) { return s; });
+  }
+
   /** Aplica um estado vindo da URL: carregamento inicial ou botão Voltar. */
   function aplicarEstado(est) {
     var pedido = est.filtros.ano;
-    F = {
-      ano: pedido === CONSOLIDADO ? ''
-        : (pedido && ANOS.indexOf(pedido) >= 0 ? pedido : anoInicial()),
-      mes: '', pc: '', mun: '', esc: '', cult: '', tec: ''
-    };
+    var anos;
+    if (pedido === CONSOLIDADO) {
+      anos = [];                       // consolidado explícito
+      anoPendenteUrl = [];
+    } else if (!pedido) {
+      anos = anosIniciais();           // sem pedido: abre no ano corrente
+      anoPendenteUrl = [];
+    } else {
+      var pedidos = listaDaUrl(pedido);
+      var validos = pedidos.filter(function (a) { return ANOS.indexOf(a) >= 0; });
+      // guarda o pedido INTEIRO, não só o que falta: reaplicá-lo de uma vez
+      // quando o histórico chegar evita um passo com metade dos anos marcados
+      anoPendenteUrl = validos.length < pedidos.length ? pedidos : [];
+      anos = validos.length ? validos : anosIniciais();
+    }
+    F = { ano: anos, mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
     CAMPOS_URL.forEach(function (k) {
-      if (k !== 'ano' && est.filtros[k]) F[k] = est.filtros[k];
+      if (k === 'ano' || !est.filtros[k]) return;
+      F[k] = CAMPOS_LISTA.indexOf(k) >= 0 ? listaDaUrl(est.filtros[k]) : est.filtros[k];
     });
     pag = 1;
     popularFiltros();
@@ -2145,7 +2345,10 @@
   }
   function aplicarAdmin() {
     var on = ehAdmin();
-    try { ADMIN_LOCAL = sessionStorage.getItem('seagri_admin') === 'local'; } catch (e) { /* privado */ }
+    try {
+      ADMIN_LOCAL = sessionStorage.getItem('seagri_admin') === 'local';
+      MOTIVO_LOCAL = sessionStorage.getItem('seagri_admin_motivo') || '';
+    } catch (e) { /* privado */ }
     el('abaAdmin').hidden = !on;
     el('adminBtn').innerHTML = on ? '&#9989;<span>Admin (sair)</span>' : '&#128274;<span>Admin</span>';
     // sem servidor não há o que publicar: o botão sai de cena em vez de falhar
@@ -2153,6 +2356,19 @@
     if (aplicar) {
       aplicar.hidden = ADMIN_LOCAL;
       aplicar.title = ADMIN_LOCAL ? 'Indisponível sem o servidor PHP' : '';
+    }
+    /* Antes o modo local só se anunciava pelo title do botão escondido: quem
+       abria a aba via um formulário de upload que parecia inteiro e descobria
+       tarde demais que não havia como publicar. Agora o motivo fica na tela. */
+    var box = el('upModoLocal');
+    if (box) {
+      box.innerHTML = (on && ADMIN_LOCAL)
+        ? '<p class="aviso erro"><b>Modo local: publicar está desativado.</b> ' + MOTIVO_LOCAL +
+          ' A senha não chegou a ser conferida e nada pode ser gravado em ' +
+          '<code>data/mecanizacao.json</code> — o que for carregado aqui vale só neste navegador.' +
+          '<br>Para publicar de verdade, abra o painel por um servidor que execute PHP: o Apache do ' +
+          'XAMPP, ou <code>php -S localhost:8734 -t .</code> na raiz do projeto.</p>'
+        : '';
     }
     if (!on && document.querySelector('.aba.ativa') &&
       document.querySelector('.aba.ativa').getAttribute('data-aba') === 'admin') abrirAba('geral');
@@ -2172,22 +2388,43 @@
       lá só dá para carregar uma planilha no próprio navegador, que não altera
       nada para ninguém. Publicar continua exigindo a senha no servidor. */
   var ADMIN_LOCAL = false;   // liberado sem servidor: publicar fica desativado
+  var MOTIVO_LOCAL = '';     // por que caiu no modo local, para explicar na aba
+
+  /** Confere a senha no PHP e distingue "senha errada" de "não há PHP do outro
+      lado". A diferença importa: um servidor de arquivos estático
+      (python -m http.server, GitHub Pages) ou um diretório bloqueado no Apache
+      respondem 501/403/404 com HTML — o painel tratava 403 como senha errada e
+      qualquer outro código como sucesso em modo local, então o admin ou tentava
+      a senha certa para sempre ou entrava sem entender por que não dava para
+      publicar. Só quem responde {ok:booleano} é o nosso endpoint; qualquer
+      outra coisa é o servidor falando no lugar dele. */
+  function conferirSenha(senha) {
+    return fetch('../salvar_mecanizacao.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'login', senha: senha })
+    }).then(function (r) {
+      return r.text().then(function (corpo) {
+        var j = null;
+        try { j = JSON.parse(corpo); } catch (e) { /* não é resposta do endpoint */ }
+        if (!j || typeof j.ok !== 'boolean') {
+          return { ok: false, semServidor: true, motivo: 'O servidor respondeu <b>HTTP ' +
+            r.status + '</b> em <code>salvar_mecanizacao.php</code> em vez de executar o PHP.' };
+        }
+        return { ok: j.ok, semServidor: false, motivo: '' };
+      });
+    }).catch(function () {
+      return { ok: false, semServidor: true, motivo: 'Não foi possível falar com ' +
+        '<code>salvar_mecanizacao.php</code> (servidor fora do ar, ou a página foi ' +
+        'aberta direto do disco, sem <code>http://</code>).' };
+    });
+  }
 
   function entrar() {
     var senha = el('admSenha').value;
     el('admErro').textContent = '';
     el('admOk').disabled = true;
-    fetch('../salvar_mecanizacao.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ acao: 'login', senha: senha })
-    }).then(function (r) {
-      if (r.status === 403) return { ok: false, semServidor: false };
-      if (!r.ok) throw new Error('servidor indisponível');
-      return r.json().then(function (j) { return { ok: !!j.ok, semServidor: false }; });
-    }).catch(function () {
-      return { ok: false, semServidor: true };   // PHP ausente ou fora do ar
-    }).then(function (res) {
+    conferirSenha(senha).then(function (res) {
       el('admOk').disabled = false;
       if (!res.ok && !res.semServidor) {
         el('admErro').textContent = 'Senha incorreta. Tente novamente.';
@@ -2196,7 +2433,11 @@
         return;
       }
       ADMIN_LOCAL = res.semServidor;
-      try { sessionStorage.setItem('seagri_admin', res.semServidor ? 'local' : '1'); } catch (e) { /* privado */ }
+      MOTIVO_LOCAL = res.motivo || '';
+      try {
+        sessionStorage.setItem('seagri_admin', res.semServidor ? 'local' : '1');
+        sessionStorage.setItem('seagri_admin_motivo', MOTIVO_LOCAL);
+      } catch (e) { /* privado */ }
       el('admOverlay').classList.remove('show');
       aplicarAdmin();
       abrirAba('admin');
@@ -2287,20 +2528,16 @@
   }
 
   /** Registros dos exercícios encerrados. Um ano que também venha no pacote do
-      ano corrente é descartado daqui: quem manda é a planilha recém-publicada. */
-  /** A qual planilha/exercício a linha pertence. Diferente de anoDe(): este é
-      o ano da FONTE, não o do serviço. Um lançamento de 2026 cuja vistoria foi
-      em dezembro/2025 continua sendo uma linha da planilha de 2026 — se a
-      sobreposição fosse medida por anoDe(), o pacote do ano corrente pareceria
-      "cobrir" 2025 e o histórico inteiro do ano seria descartado. */
-  function exercicioFonte(r) { return r.ex || r.d.slice(0, 4); }
-
+      ano corrente é descartado daqui: quem manda é a planilha recém-publicada.
+      A sobreposição se mede por anoDe(), que já é o exercício da fonte — antes
+      isso exigia uma função à parte, porque anoDe() seguia a data do serviço e
+      o pacote de 2026 parecia "cobrir" 2025, apagando o histórico do ano. */
   function historico(pacote) {
     var h = window.DADOS_MECANIZACAO_HISTORICO;
     if (!h || !Array.isArray(h.registros)) return [];
     META_HIST = h.meta || {};
-    var noPacote = new Set(pacote.registros.map(exercicioFonte));
-    return h.registros.filter(function (r) { return !noPacote.has(exercicioFonte(r)); });
+    var noPacote = new Set(pacote.registros.map(anoDe));
+    return h.registros.filter(function (r) { return !noPacote.has(anoDe(r)); });
   }
 
   var PACOTE = null;   // pacote do ano corrente, guardado para remontar com o histórico
@@ -2325,7 +2562,18 @@
     ANOS = unicos(TODOS.map(anoDe)).reverse();   // do mais recente para o mais antigo
     // ao remontar com o histórico que chegou depois, a escolha do usuário fica
     // de pé; ano vazio é o consolidado e também é preservado
-    if (!manterSelecao || (F.ano && ANOS.indexOf(F.ano) < 0)) F.ano = anoInicial();
+    // exercícios que sumiram da base (troca de planilha) saem da seleção
+    var aindaExistem = F.ano.filter(function (a) { return ANOS.indexOf(a) >= 0; });
+    if (!manterSelecao || !aindaExistem.length) F.ano = anosIniciais();
+    else F.ano = aindaExistem;
+    // os exercícios pedidos na URL podem ter acabado de existir, com o histórico
+    if (manterSelecao && anoPendenteUrl.length) {
+      var chegaram = anoPendenteUrl.filter(function (a) { return ANOS.indexOf(a) >= 0; });
+      if (chegaram.length === anoPendenteUrl.length) {
+        F.ano = chegaram;
+        anoPendenteUrl = [];
+      }
+    }
     montarSeletorAno();
     sincronizarAno();
     popularFiltros();
@@ -2344,7 +2592,11 @@
     if (window.DADOS_MECANIZACAO_HISTORICO) return Promise.resolve(true);
     return new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = '../js/dados-mecanizacao-historico.js' + (VERSAO ? '?v=' + VERSAO : '');
+      /* ?v= só em http(s). Aberto por file://, o navegador entende
+         "arquivo.js?v=123" como o NOME do arquivo e falha com
+         ERR_FILE_NOT_FOUND — o painel ficaria sem os anos encerrados. */
+      var comVersao = VERSAO && /^https?:$/.test(location.protocol);
+      s.src = '../js/dados-mecanizacao-historico.js' + (comVersao ? '?v=' + VERSAO : '');
       s.async = true;
       s.onload = function () { resolve(true); };
       s.onerror = function () { resolve(false); };   // segue só com o ano corrente
@@ -2403,7 +2655,10 @@
   function ligarAdmin() {
     el('adminBtn').addEventListener('click', function () {
       if (ehAdmin()) {
-        try { sessionStorage.removeItem('seagri_admin'); } catch (e) { /* nada */ }
+        try {
+          sessionStorage.removeItem('seagri_admin');
+          sessionStorage.removeItem('seagri_admin_motivo');
+        } catch (e) { /* nada */ }
         aplicarAdmin();
         return;
       }
@@ -2573,6 +2828,9 @@
       if (!ok || !PACOTE) return;
       usarPacote(PACOTE, FONTE, true);
       render();
+      // se o ano do link só passou a existir agora, a URL foi reescrita com o
+      // ano corrente no primeiro desenho — devolve o endereço à seleção real
+      gravarUrl(false);
     });
   });
 })();

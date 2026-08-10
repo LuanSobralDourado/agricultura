@@ -14,6 +14,10 @@
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
+// Sem isto o date() sai no fuso do php.ini (UTC por padrao) e o painel mostrava
+// "Publicada em" algumas horas a frente do relogio de quem acabou de publicar.
+date_default_timezone_set('America/Rio_Branco');
+
 const HASH_ADMIN = '$2y$10$023QXmJJwoDtbR4ZvyA3juTySoICQQB3sUBjGFJyLW9EUW3gQGBxi';
 
 /** Confere a senha. O atraso freia a tentativa em massa: sem ele da para
