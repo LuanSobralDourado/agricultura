@@ -92,7 +92,10 @@ header p{font-size:12px;opacity:.9;margin:0}
 .aba.ativa{color:var(--acento);border-bottom-color:var(--acento)}
 .aba.ativa svg{opacity:1}
 
-.wrap{flex:1;width:100%;max-width:1920px;margin:0 auto;padding:18px 26px 36px;
+/* sem teto de largura: o painel ocupa a tela inteira, seja ela qual for. Havia
+   um max-width de 1920px que centralizava o conteúdo e deixava faixas vazias
+   dos dois lados em monitor grande — justamente onde caberia mais gráfico */
+.wrap{flex:1;width:100%;padding:18px 26px 36px;
   display:flex;align-items:flex-start;gap:22px}
 .conteudo-abas{flex:1;min-width:0}
 .aba-conteudo{display:none}
@@ -100,9 +103,10 @@ header p{font-size:12px;opacity:.9;margin:0}
 
 /* ------------------------------------------------------------------ filtros */
 .filtros{display:flex;flex-direction:column;gap:10px;align-items:stretch;
-  /* largura enxuta: só o suficiente para o maior rótulo ("Responsável técnico",
-     ~135px) caber numa linha — o resto da página fica para os gráficos */
-  flex:0 0 206px;
+  /* 206px + 25%: a coluna era do tamanho exato do maior rótulo ("Responsável
+     técnico", ~135px), e nomes longos de município e de técnico ficavam
+     cortados com reticências dentro das caixas de marcação */
+  flex:0 0 258px;
   background:var(--superficie);border:1px solid var(--anel);border-radius:12px;
   padding:16px 14px;box-shadow:var(--sombra-p);
   position:sticky;top:56px;align-self:flex-start;
@@ -115,9 +119,7 @@ header p{font-size:12px;opacity:.9;margin:0}
    caixa alta, 11px, como se fossem título de filtro */
 .filtro > label,.filtro > .filtro-rot{font-size:11px;font-weight:700;letter-spacing:.5px;
   text-transform:uppercase;color:var(--tinta3);white-space:nowrap}
-.filtro select{padding:8px 10px;border:1.5px solid var(--linha-t);border-radius:8px;
-  background:var(--superficie);font-size:13px;font-family:inherit;color:var(--tinta);outline:none;cursor:pointer}
-.filtro select:focus{border-color:var(--verde2)}
+/* não há mais <select> na lateral: todo filtro é uma caixa de marcação (.multi) */
 .filtros-acoes{display:flex;gap:8px;align-items:center;flex:none;width:100%}
 .filtros-acoes .btn{flex:1}
 .btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;
@@ -145,6 +147,15 @@ header p{font-size:12px;opacity:.9;margin:0}
   max-height:264px;overflow-y:auto;padding:6px;background:var(--superficie);
   border:1px solid var(--anel);border-radius:10px;box-shadow:var(--sombra-p)}
 .multi-lista[hidden]{display:none}
+/* busca das listas longas: fica colada no topo da lista ao rolar, senão
+   sumiria de vista justamente na lista em que ela é necessária */
+.multi-busca{position:sticky;top:-6px;z-index:1;width:100%;box-sizing:border-box;
+  margin:-6px 0 6px;padding:7px 10px;border:none;border-bottom:1px solid var(--linha-t);
+  border-radius:0;background:var(--superficie);font-size:13px;font-family:inherit;
+  color:var(--tinta);outline:none}
+.multi-busca::placeholder{color:var(--tinta3)}
+.multi-busca:focus{border-bottom-color:var(--verde2)}
+.multi-sem{padding:8px;font-size:12px;color:var(--tinta3);font-style:italic;text-align:center}
 .multi-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;
   font-size:13px;color:var(--tinta);cursor:pointer}
 .multi-item:hover{background:var(--grade)}
@@ -156,12 +167,17 @@ header p{font-size:12px;opacity:.9;margin:0}
 /* Cada seção é um bloco: cabeçalho + grade de cartões. Na visão geral o
    conjunto recebe a altura útil da tela (--alt-util) e as seções dividem esse
    espaço entre si — os contadores cabem sem rolagem. */
-.kpis{display:flex;flex-direction:column;gap:10px;margin-bottom:16px;min-height:0}
-.kpis-grupo{display:flex;flex-direction:column;gap:8px;min-height:0}
+/* os espaços VERTICAIS (entre seções, entre o título e a grade, entre linhas de
+   cartões) são 25% menores do que eram — 10/8/16 viraram 7.5/6/12. A folga que
+   sobrou foi para dentro do cartão, que ganhou altura interna: o mesmo bloco de
+   tela mostra caixas maiores em vez de ar entre elas. O espaço horizontal entre
+   colunas continua 16px: ali não havia aperto. */
+.kpis{display:flex;flex-direction:column;gap:7.5px;margin-bottom:16px;min-height:0}
+.kpis-grupo{display:flex;flex-direction:column;gap:6px;min-height:0}
 /* no máximo 6 contadores por linha — colunas fixas, não auto-fit, senão em
    tela larga entram 8 ou 9 e o cartão fica ilegível */
-.kpis-linha{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;min-height:0}
-.kpi{background:var(--superficie);border:1px solid var(--anel);border-radius:12px;padding:12px 15px;
+.kpis-linha{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px 16px;min-height:0}
+.kpi{background:var(--superficie);border:1px solid var(--anel);border-radius:12px;padding:18px 15px;
   box-shadow:var(--sombra-p);border-left:4px solid var(--verde);display:block;
   text-decoration:none;color:inherit;text-align:left;font-family:inherit;width:100%;
   transition:transform .15s,box-shadow .15s}
@@ -180,11 +196,13 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
    Só vale com 6 colunas (>=1401px) e tela alta o bastante: abaixo disso cada
    seção quebra em duas linhas e 24 cartões espremidos ficariam ilegíveis. */
 @media(min-width:1401px) and (min-height:700px){
-  /* space-around: cada seção fica centrada na sua faixa (folga igual acima e
-     abaixo) em vez de colada no topo com um vão embaixo. O cartão mantém a
-     altura do conteúdo — aqui só se reposiciona. */
+  /* space-between, e não space-around: a primeira seção precisa começar na
+     linha exata do topo da coluna de filtros. Com space-around sobrava meia
+     folga acima dela, e o título "Resultados gerais" nascia abaixo da caixa de
+     filtros, como se as duas colunas não fossem do mesmo bloco. A folga que
+     resta é dividida ENTRE as seções, e a última termina junto com os filtros. */
   .aba-conteudo[data-aba="geral"] .kpis{height:var(--alt-util,auto);
-    justify-content:space-around;margin-bottom:22px}
+    justify-content:space-between;margin-bottom:22px}
   .filtros{height:var(--alt-util,calc(100vh - 72px))}
 }
 .kpi.mec{border-left-color:var(--mec)}
@@ -266,7 +284,7 @@ button.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.12
    município e as marcas dos gráficos não mostravam nada. */
 .aba:focus-visible,.kpi:focus-visible,.btn:focus-visible,.mun-card:focus-visible,
 .tema-btn:focus-visible,.painel-link:focus-visible,.relatorio-vis button:focus-visible,
-.paginacao button:focus-visible,.busca:focus-visible,.filtro select:focus-visible,
+.paginacao button:focus-visible,.busca:focus-visible,.paginacao select:focus-visible,
 table.dados th[data-ord]:focus-visible,
 .clicavel [data-foco]:focus-visible{outline:2px solid var(--acento);outline-offset:2px;
   border-radius:6px}
@@ -368,6 +386,24 @@ table.dados th[data-ord]:focus-visible,
 .kpis-ficha .kpi-val{font-size:22px}
 .ben-nome{font-size:16px;letter-spacing:.2px;text-transform:none;color:var(--acento);
   border-bottom-color:var(--acento)}
+/* lista de beneficiários do município: cada linha abre a ficha, então precisa
+   parecer clicável — a tabela de dados comum não tem cursor nem realce forte */
+.ben-voltar{display:inline-block;margin-bottom:10px;padding-left:0}
+.ben-dica{font-size:11.5px;color:var(--tinta3);font-style:italic;margin:-4px 0 10px}
+/* cabeçalhos de exercício e mês dentro da lista. O mês gruda no topo ao rolar,
+   para não se perder de vista em que mês a leitura está; o do exercício vem
+   mais forte, porque é o nível de cima */
+table.dados tr.ben-ano td{background:var(--acento-suave);color:var(--acento);
+  font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  border-bottom:1px solid var(--linha-t)}
+table.dados tr.ben-grupo td{position:sticky;top:0;background:var(--superficie2);
+  font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--tinta2);border-bottom:1px solid var(--linha-t)}
+table.dados tr.ben-ano:hover,table.dados tr.ben-grupo:hover{background:none}
+table.dados tr.ben-lin{cursor:pointer}
+table.dados tr.ben-lin:hover{background:var(--acento-suave)}
+table.dados tr.ben-lin:hover td.forte{color:var(--acento)}
+table.dados tr.ben-lin:focus-visible{outline:2px solid var(--acento);outline-offset:-2px}
 .tabela-scroll{overflow-x:auto;border:1px solid var(--linha-t);border-radius:8px;-webkit-overflow-scrolling:touch}
 table.dados{width:100%;border-collapse:collapse;font-size:12.5px}
 table.dados th{background:var(--superficie2);text-align:left;padding:9px 12px;font-size:11px;font-weight:700;

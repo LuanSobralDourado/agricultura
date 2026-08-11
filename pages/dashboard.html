@@ -10,8 +10,8 @@
 <meta property="og:description" content="Painel de acompanhamento das vistorias de mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem da SEAGRI/AC.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="../assets/brasao.png">
-<link rel="stylesheet" href="../css/base.css?v=2026081001">
-<link rel="stylesheet" href="../css/dashboard.css?v=2026081001">
+<link rel="stylesheet" href="../css/base.css?v=2026081009">
+<link rel="stylesheet" href="../css/dashboard.css?v=2026081009">
 <script>
   /* aplica o tema antes da pintura para não piscar branco */
   (function () {
@@ -60,7 +60,7 @@
   <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
 </nav>
 <button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
-<script src="../js/sidebar.js?v=2026081001"></script>
+<script src="../js/sidebar.js?v=2026081009"></script>
 <script>
 /* no painel a barra lateral começa recolhida — maximiza a área de dados */
 (function(){
@@ -131,8 +131,11 @@
   <section class="filtros" aria-label="Filtros">
     <!-- per&iacute;odo: recorte mais amplo do painel, por isso encabe&ccedil;a os filtros.
          As op&ccedil;&otilde;es s&atilde;o montadas por js/dashboard.js a partir dos anos da base. -->
-    <!-- Per&iacute;odo e M&ecirc;s aceitam mais de um valor: s&atilde;o montados por js/dashboard.js
-         como caixas de marca&ccedil;&atilde;o, n&atilde;o como <select>. Nada marcado = tudo. -->
+    <!-- TODO filtro aceita mais de um valor: s&atilde;o montados por js/dashboard.js
+         como caixas de marca&ccedil;&atilde;o, nenhum &eacute; <select>. A lista abre desmarcada,
+         e nada marcado = tudo. O Per&iacute;odo &eacute; a exce&ccedil;&atilde;o: abre no exerc&iacute;cio mais
+         recente, para a tela inicial ser o ano corrente inteiro.
+         Marcar uma regional recorta a lista de munic&iacute;pios para os dela. -->
     <div class="filtro" id="filtroExercicio" hidden>
       <span class="filtro-rot" id="rotExercicio">Per&iacute;odo</span>
       <div class="multi" id="fExercicio"></div>
@@ -142,12 +145,9 @@
       <div class="multi" id="fMes"></div>
     </div>
     <div class="filtro">
-      <label for="fPonto">Servi&ccedil;o</label>
-      <select id="fPonto"></select>
+      <span class="filtro-rot" id="rotPonto">Servi&ccedil;o</span>
+      <div class="multi" id="fPonto"></div>
     </div>
-    <!-- Regional e Munic&iacute;pio tamb&eacute;m s&atilde;o caixas de marca&ccedil;&atilde;o, e come&ccedil;am com
-         TUDO marcado: o padr&atilde;o do painel &eacute; mostrar o estado inteiro.
-         Marcar uma regional recorta a lista de munic&iacute;pios para os dela. -->
     <div class="filtro">
       <span class="filtro-rot" id="rotReg">Regional</span>
       <div class="multi" id="fReg"></div>
@@ -157,16 +157,16 @@
       <div class="multi" id="fMun"></div>
     </div>
     <div class="filtro">
-      <label for="fEsc">Escrit&oacute;rio local</label>
-      <select id="fEsc"></select>
+      <span class="filtro-rot" id="rotEsc">Escrit&oacute;rio local</span>
+      <div class="multi" id="fEsc"></div>
     </div>
     <div class="filtro">
-      <label for="fCult">Cultura</label>
-      <select id="fCult"></select>
+      <span class="filtro-rot" id="rotCult">Cultura</span>
+      <div class="multi" id="fCult"></div>
     </div>
     <div class="filtro">
-      <label for="fTec">Respons&aacute;vel t&eacute;cnico</label>
-      <select id="fTec"></select>
+      <span class="filtro-rot" id="rotTec">Respons&aacute;vel t&eacute;cnico</span>
+      <div class="multi" id="fTec"></div>
     </div>
     <div class="filtros-acoes">
       <button class="btn" id="btnLimpar" type="button">Limpar filtros</button>
@@ -670,9 +670,9 @@
 <!-- dados-mecanizacao-historico.js (1,3 MB, exercícios encerrados) NÃO entra
      aqui de propósito: o painel abre no ano corrente e js/dashboard.js o busca
      em segundo plano, depois do primeiro desenho. -->
-<script src="../js/dados-mecanizacao.js?v=2026081001"></script>
-<script src="../js/graficos.js?v=2026081001"></script>
-<script src="../js/importar.js?v=2026081001"></script>
-<script src="../js/dashboard.js?v=2026081001"></script>
+<script src="../js/dados-mecanizacao.js?v=2026081009"></script>
+<script src="../js/graficos.js?v=2026081009"></script>
+<script src="../js/importar.js?v=2026081009"></script>
+<script src="../js/dashboard.js?v=2026081009"></script>
 </body>
 </html>
