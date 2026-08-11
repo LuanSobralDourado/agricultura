@@ -110,8 +110,11 @@ header p{font-size:12px;opacity:.9;margin:0}
 .filtros .filtro{flex:0 0 auto}
 .filtros .filtros-acoes{margin-top:auto}
 .filtro{display:flex;flex-direction:column;gap:5px;flex:none;width:100%;min-width:0;max-width:none}
-.filtro label,.filtro .filtro-rot{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
-  color:var(--tinta3);white-space:nowrap}
+/* filho DIRETO: é o rótulo do campo. Sem o `>`, a regra alcançava também os
+   <label> das caixas de marcação lá dentro — e nomes de município saíam em
+   caixa alta, 11px, como se fossem título de filtro */
+.filtro > label,.filtro > .filtro-rot{font-size:11px;font-weight:700;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--tinta3);white-space:nowrap}
 .filtro select{padding:8px 10px;border:1.5px solid var(--linha-t);border-radius:8px;
   background:var(--superficie);font-size:13px;font-family:inherit;color:var(--tinta);outline:none;cursor:pointer}
 .filtro select:focus{border-color:var(--verde2)}

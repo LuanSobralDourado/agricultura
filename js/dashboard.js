@@ -250,17 +250,65 @@
     atualizar(); // as cores das séries vêm do CSS: todo desenho ficou velho
   }
 
+  /* ------------------------------------------------------------- regionais --
+     Regionais de desenvolvimento do Acre. A planilha não traz esse campo: o
+     município é a única informação territorial da linha, então a regional é
+     derivada dele por esta tabela. Os 22 municípios do estado estão aqui,
+     mesmo os que ainda não aparecem na base — assim uma linha nova de Jordão
+     ou Porto Walter já cai na regional certa sem mexer no código. */
+  var REGIONAIS = [
+    { nome: 'Alto Acre', muns: ['Assis Brasil', 'Brasiléia', 'Epitaciolândia', 'Xapuri'] },
+    { nome: 'Baixo Acre', muns: ['Acrelândia', 'Bujari', 'Capixaba', 'Plácido de Castro',
+      'Porto Acre', 'Rio Branco', 'Senador Guiomard'] },
+    { nome: 'Purus', muns: ['Manoel Urbano', 'Santa Rosa do Purus', 'Sena Madureira'] },
+    { nome: 'Tarauacá/Envira', muns: ['Feijó', 'Jordão', 'Tarauacá'] },
+    { nome: 'Juruá', muns: ['Cruzeiro do Sul', 'Mâncio Lima', 'Marechal Thaumaturgo',
+      'Porto Walter', 'Rodrigues Alves'] }
+  ];
+
+  /** Município → regional. A chave passa por chaveBusca (sem acento, sem caixa)
+      porque a planilha grafa o mesmo município de formas diferentes — "Brasileia"
+      sem acento e "BRASILÉIA" em caixa alta convivem na base. */
+  var REG_DE_MUN = (function () {
+    var m = {};
+    REGIONAIS.forEach(function (r) {
+      r.muns.forEach(function (mun) { m[chaveBusca(mun)] = r.nome; });
+    });
+    return m;
+  })();
+
+  /** Regional de um registro. Vazio quando o município é desconhecido ou não
+      informado — esses só aparecem quando nenhuma regional está marcada. */
+  function regionalDe(mun) { return REG_DE_MUN[chaveBusca(mun || '')] || ''; }
+
   /* ---------------------------------------------------------------- filtros */
-  /* ano e mes são LISTAS: aceitam mais de um valor ("2025 e 2026", "jan a mar").
-     Lista vazia é "sem recorte" — no período isso significa o consolidado.
+  /* ano, mes, reg e mun são LISTAS: aceitam mais de um valor ("2025 e 2026",
+     "jan a mar", "Rio Branco e Xapuri"). Lista vazia é "sem recorte" — no
+     período isso significa o consolidado; em regional e município significa
+     TODOS, e é assim que o painel abre, com todas as caixas marcadas.
      Os demais filtros continuam de valor único. */
-  var F = { ano: [], mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
+  var F = { ano: [], mes: [], pc: '', reg: [], mun: [], esc: '', cult: '', tec: '' };
 
   /* --------------------------------------------- caixa de seleção múltipla --
      Um botão que abre uma lista de caixas de marcação. Ver .multi no CSS para
      o porquê de não ser um <select multiple>.
-     MULTI[id] = { itens:[{v,rot}], sel:[], vazio, plural, rotulo, aoMudar } */
+     MULTI[id] = { itens:[{v,rot}], sel:[], vazio, plural, rotulo, aoMudar,
+                   todosMarcados }
+
+     `sel` vazio é sempre "sem recorte". Com `todosMarcados`, esse mesmo estado
+     é DESENHADO com todas as caixas marcadas — é o padrão de regional e
+     município, onde "nenhum marcado" não faria sentido para quem olha.
+     Guardar o "todos" como lista vazia, e não como a lista inteira, é o que
+     mantém a seleção honesta quando o conjunto muda: o histórico chega depois
+     do primeiro desenho e traz municípios novos, que assim já entram marcados
+     em vez de ficarem calados fora de uma lista congelada. */
   var MULTI = {};
+
+  /** O que está marcado na tela. Difere de cfg.sel só no estado "todos". */
+  function marcadosMulti(cfg) {
+    if (cfg.sel.length || !cfg.todosMarcados) return cfg.sel;
+    return cfg.itens.map(function (i) { return i.v; });
+  }
 
   function resumoMulti(cfg) {
     if (!cfg.sel.length) return cfg.vazio;
@@ -284,6 +332,7 @@
     var focado = document.activeElement;
     var vFocado = (focado && caixa.contains(focado) && focado.type === 'checkbox')
       ? focado.value : null;
+    var marcados = marcadosMulti(cfg);
     caixa.innerHTML =
       '<button type="button" class="multi-btn" aria-haspopup="true" aria-expanded="' +
         (aberto ? 'true' : 'false') + '" aria-labelledby="' + cfg.rotulo + ' ' + id + 'Txt">' +
@@ -294,7 +343,7 @@
       '<div class="multi-lista"' + (aberto ? '' : ' hidden') + '>' +
         cfg.itens.map(function (i) {
           return '<label class="multi-item"><input type="checkbox" value="' + G.esc(i.v) + '"' +
-            (cfg.sel.indexOf(i.v) >= 0 ? ' checked' : '') + '>' + G.esc(i.rot) + '</label>';
+            (marcados.indexOf(i.v) >= 0 ? ' checked' : '') + '>' + G.esc(i.rot) + '</label>';
         }).join('') +
         '<button type="button" class="btn multi-limpar"' + (cfg.sel.length ? '' : ' hidden') + '>' +
         G.esc(cfg.vazio) + '</button>' +
@@ -352,14 +401,20 @@
       var cx = e.target;
       if (!cx || cx.type !== 'checkbox') return;
       var cfg = MULTI[id];
+      var todos = cfg.itens.map(function (i) { return i.v; });
       var marcados = {};
-      cfg.sel.forEach(function (v) { marcados[v] = true; });
+      marcadosMulti(cfg).forEach(function (v) { marcados[v] = true; });
       if (cx.checked) marcados[cx.value] = true; else delete marcados[cx.value];
       // reordena pela ordem da lista: a seleção vira rótulo e URL, e "2026,2025"
       // saindo em ordem de clique deixaria links iguais com textos diferentes
-      cfg.sel = cfg.itens.map(function (i) { return i.v; })
-        .filter(function (v) { return marcados[v]; });
-      atualizarResumoMulti(id);
+      var sel = todos.filter(function (v) { return marcados[v]; });
+      /* Nas caixas que abrem com tudo marcado, "todos" e "nenhum" são o mesmo
+         estado: sem recorte. Desmarcar o último município devolve o estado
+         cheio em vez de deixar o painel vazio — e aí a lista tem de ser
+         redesenhada, porque as caixas na tela voltam todas a marcadas. */
+      var voltouAoTodos = cfg.todosMarcados && (!sel.length || sel.length === todos.length);
+      cfg.sel = voltouAoTodos ? [] : sel;
+      if (voltouAoTodos) desenharMulti(id); else atualizarResumoMulti(id);
       cfg.aoMudar(cfg.sel.slice());
     });
 
@@ -421,8 +476,52 @@
       }
     });
 
+    /* Regionais: só as que têm registro no recorte, na ordem geográfica da
+       tabela (Alto Acre → Juruá), não em ordem alfabética. Uma regional sem
+       nenhum atendimento no período não entra: marcá-la zeraria o painel. */
+    var comReg = {};
+    filtrar(['reg', 'mun']).forEach(function (r) {
+      var g = regionalDe(r.mun);
+      if (g) comReg[g] = true;
+    });
+    F.reg.forEach(function (g) { comReg[g] = true; });
+    montarMulti('fReg', {
+      itens: REGIONAIS.filter(function (r) { return comReg[r.nome]; })
+        .map(function (r) { return { v: r.nome, rot: r.nome }; }),
+      sel: F.reg.slice(), vazio: 'Todas as regionais', plural: 'regionais',
+      rotulo: 'rotReg', todosMarcados: true,
+      aoMudar: function (sel) {
+        F.reg = sel;
+        /* A regional manda no município: escolher o Juruá tem de mostrar o
+           Juruá inteiro, e não a interseção com um município do Alto Acre que
+           ficou marcado de antes — isso deixaria o painel vazio sem explicar
+           por quê. Voltar ao "todos" faz a lista abaixo já vir com os
+           municípios da regional escolhida, todos marcados. */
+        F.mun = [];
+        pag = 1;
+        popularFiltros();
+        atualizar();
+      }
+    });
+
+    /* Municípios: a lista já sai recortada pela regional, porque filtrar('mun')
+       aplica todos os outros filtros — inclusive o de regional. */
+    var municipios = unicos(filtrar('mun').map(function (r) { return r.mun; }));
+    F.mun.forEach(function (m) { if (municipios.indexOf(m) < 0) municipios.push(m); });
+    municipios.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+    montarMulti('fMun', {
+      itens: municipios.map(function (m) { return { v: m, rot: m }; }),
+      sel: F.mun.slice(), vazio: 'Todos os municípios', plural: 'municípios',
+      rotulo: 'rotMun', todosMarcados: true,
+      aoMudar: function (sel) {
+        F.mun = sel;
+        pag = 1;
+        popularFiltros();
+        atualizar();
+      }
+    });
+
     preencher('fPonto', unicos(filtrar('pc').map(function (r) { return r.pc; })), 'Todos os serviços', F.pc);
-    preencher('fMun', unicos(filtrar('mun').map(function (r) { return r.mun; })), 'Todos os municípios', F.mun);
     preencher('fEsc', unicos(filtrar('esc').map(function (r) { return r.esc; })), 'Todos os escritórios', F.esc);
     preencher('fTec', unicos(filtrar('tec').map(function (r) { return r.rt; })), 'Todos os técnicos', F.tec);
     var culturas = [];
@@ -432,8 +531,8 @@
   }
 
   function ligarFiltros() {
-    // fExercicio e fMes são caixas de marcação: ligam-se em montarMulti()
-    ['fPonto|pc', 'fMun|mun', 'fEsc|esc', 'fCult|cult', 'fTec|tec'].forEach(function (par) {
+    // fExercicio, fMes, fReg e fMun são caixas de marcação: ligam-se em montarMulti()
+    ['fPonto|pc', 'fEsc|esc', 'fCult|cult', 'fTec|tec'].forEach(function (par) {
       var p = par.split('|');
       el(p[0]).addEventListener('change', function () {
         F[p[1]] = this.value;
@@ -444,7 +543,7 @@
     });
     el('btnLimpar').addEventListener('click', function () {
       // o exercício não é um filtro comum: continua sendo o do período escolhido
-      F = { ano: F.ano, mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
+      F = { ano: F.ano, mes: [], pc: '', reg: [], mun: [], esc: '', cult: '', tec: '' };
       el('busca').value = '';
       pag = 1;
       popularFiltros();
@@ -454,23 +553,31 @@
 
   function sincronizarFiltros() {
     el('fPonto').value = F.pc;
-    el('fMun').value = F.mun; el('fEsc').value = F.esc; el('fCult').value = F.cult;
+    el('fEsc').value = F.esc; el('fCult').value = F.cult;
     el('fTec').value = F.tec;
   }
 
   /** Aplica a seleção. `exceto` deixa um filtro de fora — é o que permite
-      montar a lista de opções de um campo sem que ele restrinja a si mesmo. */
+      montar a lista de opções de um campo sem que ele restrinja a si mesmo.
+      Aceita uma lista de campos: a de regionais precisa ignorar também o
+      município, porque escolher outra regional zera o município. */
   function filtrar(exceto, anoAlvo) {
+    var fora = Array.isArray(exceto) ? exceto : [exceto];
+    function sem(k) { return fora.indexOf(k) >= 0; }
     // anoAlvo é sempre um exercício só (a comparação com o ano anterior)
     var anos = (anoAlvo === undefined) ? F.ano : (anoAlvo ? [anoAlvo] : []);
     return TODOS.filter(function (r) {
       if (anos.length && anos.indexOf(anoDe(r)) < 0) return false;
-      if (exceto !== 'mes' && F.mes.length && F.mes.indexOf(dataRef(r).slice(5, 7)) < 0) return false;
-      if (exceto !== 'pc' && F.pc && r.pc !== F.pc) return false;
-      if (exceto !== 'mun' && F.mun && r.mun !== F.mun) return false;
-      if (exceto !== 'esc' && F.esc && r.esc !== F.esc) return false;
-      if (exceto !== 'tec' && F.tec && r.rt !== F.tec) return false;
-      if (exceto !== 'cult' && F.cult && !r.cult.some(function (c) { return c[0] === F.cult; })) return false;
+      if (!sem('mes') && F.mes.length && F.mes.indexOf(dataRef(r).slice(5, 7)) < 0) return false;
+      if (!sem('pc') && F.pc && r.pc !== F.pc) return false;
+      /* Regional e município são listas, e lista vazia é TODOS. A regional é
+         derivada do município (ver REGIONAIS): marcá-la traz de uma vez os
+         registros de todos os municípios dela. */
+      if (!sem('reg') && F.reg.length && F.reg.indexOf(regionalDe(r.mun)) < 0) return false;
+      if (!sem('mun') && F.mun.length && F.mun.indexOf(r.mun) < 0) return false;
+      if (!sem('esc') && F.esc && r.esc !== F.esc) return false;
+      if (!sem('tec') && F.tec && r.rt !== F.tec) return false;
+      if (!sem('cult') && F.cult && !r.cult.some(function (c) { return c[0] === F.cult; })) return false;
       return true;
     });
   }
@@ -518,7 +625,7 @@
     // depois, e trocar o período debaixo de quem acabou de escolher é pior
     // do que ignorar o link
     anoPendenteUrl = [];
-    F = { ano: anos.slice(), mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
+    F = { ano: anos.slice(), mes: [], pc: '', reg: [], mun: [], esc: '', cult: '', tec: '' };
     if (el('busca')) el('busca').value = '';
     pag = 1;
     popularFiltros();
@@ -638,8 +745,13 @@
         F.pc = ligando ? rot : '';
         // desmarcar o serviço não é "ir para o serviço": só abre a aba ao ligar
         ir = ligando ? (rot === ACU ? 'acudagem' : rot === MEC ? 'mecanizacao' : irPadrao) : irPadrao;
+      } else if (campo === 'mun') {
+        /* Clicar numa barra é ir para aquele município, não somá-lo à seleção:
+           quem clica quer o detalhe de um. Clicar no que já está sozinho na
+           seleção desfaz e volta para todos. */
+        F.mun = (F.mun.length === 1 && F.mun[0] === rot) ? [] : [rot];
       } else {
-        var k = { mun: 'mun', esc: 'esc', cult: 'cult', tec: 'tec' }[campo];
+        var k = { esc: 'esc', cult: 'cult', tec: 'tec' }[campo];
         if (!k) return;
         F[k] = (F[k] === rot) ? '' : rot;
       }
@@ -2213,8 +2325,10 @@
   /* A seleção inteira — aba e filtros — vai para o endereço. Assim uma visão
      do painel pode ser mandada por link e sobrevive ao F5; antes só a aba ia
      para o hash e recarregar voltava sempre ao ano corrente, sem filtro. */
-  var CAMPOS_URL = ['ano', 'mes', 'pc', 'mun', 'esc', 'cult', 'tec'];
-  var CAMPOS_LISTA = ['ano', 'mes'];   // aceitam vários valores, separados por vírgula
+  var CAMPOS_URL = ['ano', 'mes', 'pc', 'reg', 'mun', 'esc', 'cult', 'tec'];
+  // aceitam vários valores, separados por vírgula. Em reg e mun a lista vazia
+  // é "todos", e por isso simplesmente não vai para o endereço
+  var CAMPOS_LISTA = ['ano', 'mes', 'reg', 'mun'];
 
   function estadoParaHash() {
     var p = [];
@@ -2284,7 +2398,7 @@
       anoPendenteUrl = validos.length < pedidos.length ? pedidos : [];
       anos = validos.length ? validos : anosIniciais();
     }
-    F = { ano: anos, mes: [], pc: '', mun: '', esc: '', cult: '', tec: '' };
+    F = { ano: anos, mes: [], pc: '', reg: [], mun: [], esc: '', cult: '', tec: '' };
     CAMPOS_URL.forEach(function (k) {
       if (k === 'ano' || !est.filtros[k]) return;
       F[k] = CAMPOS_LISTA.indexOf(k) >= 0 ? listaDaUrl(est.filtros[k]) : est.filtros[k];
