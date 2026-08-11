@@ -10,8 +10,8 @@
 <meta property="og:description" content="Painel de acompanhamento das vistorias de mecaniza&ccedil;&atilde;o agr&iacute;cola e a&ccedil;udagem da SEAGRI/AC.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="../assets/brasao.png">
-<link rel="stylesheet" href="../css/base.css?v=2026081009">
-<link rel="stylesheet" href="../css/dashboard.css?v=2026081009">
+<link rel="stylesheet" href="../css/base.css?v=2026081101">
+<link rel="stylesheet" href="../css/dashboard.css?v=2026081101">
 <script>
   /* aplica o tema antes da pintura para não piscar branco */
   (function () {
@@ -60,7 +60,7 @@
   <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
 </nav>
 <button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
-<script src="../js/sidebar.js?v=2026081009"></script>
+<script src="../js/sidebar.js?v=2026081101"></script>
 <script>
 /* no painel a barra lateral começa recolhida — maximiza a área de dados */
 (function(){
@@ -117,6 +117,26 @@
     <button class="aba" data-aba="registros" type="button" role="tab" id="aba-registros" aria-controls="painel-registros" aria-selected="false" tabindex="-1">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       Registros
+    </button>
+    <!-- As quatro abas abaixo reproduzem as planilhas "Inser&ccedil;&otilde;es por pessoa",
+         "Inser&ccedil;&otilde;es por dia", "Inser&ccedil;&atilde;o por mes" e "culturas". Contam
+         LAN&Ccedil;AMENTOS e nomeiam quem lan&ccedil;ou, ent&atilde;o ficam atr&aacute;s da senha:
+         s&atilde;o exibidas por aplicarAdmin(), junto com "Atualizar dados". -->
+    <button class="aba aba-admin" data-aba="ins-pessoa" type="button" role="tab" id="aba-ins-pessoa" aria-controls="painel-ins-pessoa" aria-selected="false" tabindex="-1" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></svg>
+      Inser&ccedil;&otilde;es por pessoa
+    </button>
+    <button class="aba aba-admin" data-aba="ins-dia" type="button" role="tab" id="aba-ins-dia" aria-controls="painel-ins-dia" aria-selected="false" tabindex="-1" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/><rect x="7" y="13" width="3" height="3" rx=".5" fill="currentColor" stroke="none"/></svg>
+      Inser&ccedil;&otilde;es por dia
+    </button>
+    <button class="aba aba-admin" data-aba="ins-mes" type="button" role="tab" id="aba-ins-mes" aria-controls="painel-ins-mes" aria-selected="false" tabindex="-1" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/><path d="M7 17l3-3 3 2 4-4"/></svg>
+      Inser&ccedil;&otilde;es por m&ecirc;s
+    </button>
+    <button class="aba aba-admin" data-aba="ins-cultura" type="button" role="tab" id="aba-ins-cultura" aria-controls="painel-ins-cultura" aria-selected="false" tabindex="-1" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V9"/><path d="M12 9c0-4 3-7 7-7 0 4-3 7-7 7z"/><path d="M12 13C9 13 6 10.5 6 6c3.5 0 6 2.5 6 7z"/></svg>
+      Culturas
     </button>
     <button class="aba aba-admin" data-aba="admin" type="button" role="tab" id="abaAdmin" aria-controls="painel-admin" aria-selected="false" tabindex="-1" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/><path d="M12 11v4M12 8.5v.5"/></svg>
@@ -571,6 +591,137 @@
     <div class="relatorio-grid" id="relatorioGrid"></div>
   </div>
 
+  <!-- ============================== ABA: INSERÇÕES POR PESSOA (admin) ----->
+  <!-- Aqui a unidade &eacute; o LAN&Ccedil;AMENTO (uma linha da planilha) e a data &eacute; a de
+       INSER&Ccedil;&Atilde;O (Carimbo de data/hora) &mdash; nunca a da vistoria. -->
+  <div class="aba-conteudo" data-aba="ins-pessoa" role="tabpanel" id="painel-ins-pessoa" aria-labelledby="aba-ins-pessoa" tabindex="0">
+    <section class="kpis" id="kpisInsPessoa" aria-label="Indicadores de inser&ccedil;&atilde;o por pessoa"></section>
+    <div class="painel-grid">
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Ranking de inseridores</h2>
+          <p class="sub">Lan&ccedil;amentos feitos por cada usu&aacute;rio do formul&aacute;rio, na sele&ccedil;&atilde;o atual.</p>
+        </div></div>
+        <div id="gInsPessoa" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Ritmo por inseridor</h2>
+          <p class="sub">M&eacute;dia de lan&ccedil;amentos nos dias em que a pessoa lan&ccedil;ou alguma coisa.</p>
+        </div></div>
+        <div id="gInsPessoaRitmo" data-tipos="barras,colunas,tabela" data-dec="1"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Inser&ccedil;&otilde;es por m&ecirc;s e inseridor</h2>
+          <p class="sub">Os cinco maiores do per&iacute;odo, m&ecirc;s a m&ecirc;s pela data de inser&ccedil;&atilde;o.</p>
+        </div></div>
+        <div id="gInsPessoaMes" data-tipos="colunas,linha,area,tabela"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Detalhe por inseridor</h2>
+          <p class="sub">Dias ativos, ritmo e per&iacute;odo de atua&ccedil;&atilde;o de cada um.</p>
+        </div></div>
+        <div id="tInsPessoa"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ================================= ABA: INSERÇÕES POR DIA (admin) ----->
+  <div class="aba-conteudo" data-aba="ins-dia" role="tabpanel" id="painel-ins-dia" aria-labelledby="aba-ins-dia" tabindex="0">
+    <section class="kpis" id="kpisInsDia" aria-label="Indicadores de inser&ccedil;&atilde;o por dia"></section>
+    <div class="painel-grid">
+      <section class="painel largo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Lan&ccedil;amentos por dia</h2>
+          <p class="sub">S&oacute; os dias que tiveram inser&ccedil;&atilde;o aparecem no eixo.</p>
+        </div></div>
+        <div id="gInsDiaSerie" data-tipos="colunas,linha,area,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Por dia da semana</h2>
+          <p class="sub">Onde se concentra o trabalho de digita&ccedil;&atilde;o.</p>
+        </div></div>
+        <div id="gInsDiaSemana" data-tipos="colunas,barras,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Faixas de volume di&aacute;rio</h2>
+          <p class="sub">Quantos dias tiveram cada volume de lan&ccedil;amentos.</p>
+        </div></div>
+        <div id="gInsDiaFaixa" data-tipos="colunas,barras,rosca,pizza,tabela"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Dia a dia</h2>
+          <p class="sub">Varia&ccedil;&atilde;o em rela&ccedil;&atilde;o ao dia com inser&ccedil;&atilde;o anterior, com o local e o inseridor que mais lan&ccedil;aram no dia.</p>
+        </div></div>
+        <div class="tabela-cab">
+          <input type="search" class="busca" id="buscaInsDia" placeholder="Buscar dia, local ou inseridor&hellip;" aria-label="Buscar no dia a dia">
+        </div>
+        <div id="tInsDia"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ================================= ABA: INSERÇÕES POR MÊS (admin) ----->
+  <div class="aba-conteudo" data-aba="ins-mes" role="tabpanel" id="painel-ins-mes" aria-labelledby="aba-ins-mes" tabindex="0">
+    <section class="kpis" id="kpisInsMes" aria-label="Indicadores de inser&ccedil;&atilde;o por m&ecirc;s"></section>
+    <div class="painel-grid">
+      <section class="painel largo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Lan&ccedil;amentos por m&ecirc;s</h2>
+          <p class="sub">Pela data de inser&ccedil;&atilde;o, n&atilde;o pela da vistoria.</p>
+        </div></div>
+        <div id="gInsMesSerie" data-tipos="colunas,linha,area,tabela"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Dias &uacute;teis com e sem inser&ccedil;&atilde;o</h2>
+          <p class="sub">S&aacute;bados e domingos n&atilde;o contam como falta. O m&ecirc;s corrente vai s&oacute; at&eacute; o &uacute;ltimo lan&ccedil;amento.</p>
+        </div></div>
+        <div id="gInsMesDias" data-tipos="colunas,linha,area,tabela"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Detalhe m&ecirc;s a m&ecirc;s</h2>
+          <p class="sub">Mesmo recorte da planilha <em>Inser&ccedil;&atilde;o por mes</em>, com os dias listados.</p>
+        </div></div>
+        <div id="tInsMes"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ======================================= ABA: CULTURAS (admin) -------->
+  <div class="aba-conteudo" data-aba="ins-cultura" role="tabpanel" id="painel-ins-cultura" aria-labelledby="aba-ins-cultura" tabindex="0">
+    <section class="kpis" id="kpisInsCult" aria-label="Indicadores de culturas"></section>
+    <div class="painel-grid">
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Cultura soma geral</h2>
+          <p class="sub">Hectares somados das at&eacute; quatro culturas de cada lan&ccedil;amento. Clique para filtrar a cultura.</p>
+        </div></div>
+        <div id="gInsCultHa" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="cult" data-unidade="ha" data-dec="1"></div>
+      </section>
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Declara&ccedil;&otilde;es por cultura</h2>
+          <p class="sub">Quantas vezes cada cultura foi declarada.</p>
+        </div></div>
+        <div id="gInsCultQtd" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="cult"></div>
+      </section>
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Total de hectares por cultura</h2>
+          <p class="sub">Mesma soma da planilha <em>culturas</em>, com participa&ccedil;&atilde;o e acumulado.</p>
+        </div></div>
+        <div id="tInsCult"></div>
+      </section>
+    </div>
+  </div>
+
   <!-- ======================================== ABA: ATUALIZAR DADOS (admin) -->
   <div class="aba-conteudo" data-aba="admin" role="tabpanel" id="painel-admin" aria-labelledby="abaAdmin" tabindex="0">
     <div class="painel-grid">
@@ -621,6 +772,9 @@
                 e todo mundo passa a ver os dados novos. A vers&atilde;o anterior fica guardada em
                 <code>data/mecanizacao-anterior.json</code>.</li>
             <li><b>Usar s&oacute; neste navegador</b> guarda no seu navegador, sem tocar no servidor &mdash; serve para conferir antes de publicar.</li>
+            <li>As abas <b>Inser&ccedil;&otilde;es por pessoa / por dia / por m&ecirc;s</b> e <b>Culturas</b> saem da mesma
+                aba <b>dados</b> e s&oacute; aparecem com a senha &mdash; elas nomeiam quem lan&ccedil;ou cada linha.
+                Publicar uma planilha nova atualiza as quatro junto com o resto do painel.</li>
             <li>O upload troca <b>apenas o ano corrente</b>. Os exerc&iacute;cios encerrados (2023 a 2025) ficam em
                 <code>js/dados-mecanizacao-historico.js</code> e n&atilde;o s&atilde;o afetados. Para refaz&ecirc;-los,
                 rode <code>python tools/gerar_historico_mecanizacao.py</code>.</li>
@@ -670,9 +824,9 @@
 <!-- dados-mecanizacao-historico.js (1,3 MB, exercícios encerrados) NÃO entra
      aqui de propósito: o painel abre no ano corrente e js/dashboard.js o busca
      em segundo plano, depois do primeiro desenho. -->
-<script src="../js/dados-mecanizacao.js?v=2026081009"></script>
-<script src="../js/graficos.js?v=2026081009"></script>
-<script src="../js/importar.js?v=2026081009"></script>
-<script src="../js/dashboard.js?v=2026081009"></script>
+<script src="../js/dados-mecanizacao.js?v=2026081101"></script>
+<script src="../js/graficos.js?v=2026081101"></script>
+<script src="../js/importar.js?v=2026081101"></script>
+<script src="../js/dashboard.js?v=2026081101"></script>
 </body>
 </html>

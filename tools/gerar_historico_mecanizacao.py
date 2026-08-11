@@ -40,7 +40,8 @@ NAO_INF = base.NAO_INF
 # Colunas fixas da aba "geral" (indice 0-based; o cabecalho tem espacos e
 # duplicatas que impedem a busca por nome usada na aba "dados").
 C = {
-    "ano": 0, "carimbo": 1, "escritorio": 4, "vistoria": 5, "tecnico": 6,
+    "ano": 0, "carimbo": 1, "email": 2, "email2": 3,
+    "escritorio": 4, "vistoria": 5, "tecnico": 6,
     "produtor": 7, "sexo": 8, "cpf": 9, "civil": 10, "assoc": 13, "dap": 14,
     "municipio": 17, "endereco": 18, "propriedade": 19, "ponto": 20,
     "horas": 21, "maquina": 22, "total_mec": 38, "geox": 39, "geoy": 40,
@@ -148,6 +149,7 @@ def main():
             "mun": base.rotulo(v("municipio")),
             "esc": base.norm_escritorio(v("escritorio")),
             "rt": base.norm_tecnico(v("tecnico")),
+            "alim": base.norm_alimentador(v("email"), v("email2")),
             "prod": base.titulo(produtor) if produtor.isupper() else produtor,
             "pid": pid,
             "sexo": base.rotulo(v("sexo")),

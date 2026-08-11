@@ -2036,6 +2036,460 @@
     renderRelatorio(D);
   }
 
+  /* ================== ABAS DE INSERÇÃO E CULTURAS (admin) ==================
+     Reproduzem as planilhas "Inserções por pessoa", "Inserções por dia",
+     "Inserção por mes" e "culturas" do arquivo de mecanização.
+
+     A diferença para o resto do painel: aqui a unidade é o LANÇAMENTO — uma
+     linha da planilha — e a data é a de INSERÇÃO (Carimbo de data/hora),
+     nunca a da vistoria. É produtividade de quem alimenta o formulário, não
+     de quem faz o serviço. Como nomeiam quem lançou cada linha, ficam atrás
+     da senha, junto com "Atualizar dados".
+
+     Os números batem com as abas da planilha quando o Período é o exercício
+     dela e nenhum outro filtro está marcado. */
+
+  var MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+  /** Dia da semana de uma data ISO. Ao meio-dia UTC de propósito: com
+      'YYYY-MM-DD' puro o JS assume UTC 00:00 e, em fuso negativo como o do
+      Acre, a data volta um dia — 25/01/2026 saía sábado em vez de domingo. */
+  function diaSemana(iso) { return new Date(iso + 'T12:00:00Z').getUTCDay(); }
+  function fimDeSemana(iso) { var s = diaSemana(iso); return s === 0 || s === 6; }
+  function diasNoMes(ano, mes) { return new Date(Date.UTC(ano, mes, 0)).getUTCDate(); }
+  function iso2(v) { return String(v).padStart(2, '0'); }
+  function mesLongo(ym) { return MESES_LONGO[+ym.slice(5, 7) - 1]; }
+  /** Chave mais frequente de um Map de contagens ('' quando não há nenhuma). */
+  function maisFrequente(m) {
+    var rot = '', val = 0;
+    m.forEach(function (v, k) { if (v > val) { val = v; rot = k; } });
+    return { rot: rot, val: val };
+  }
+  function variacao(atual, anterior) {
+    if (anterior == null) return null;
+    return { dif: atual - anterior, pct: anterior ? (atual - anterior) / anterior * 100 : null };
+  }
+  /** "▲ +7 (47%)" — a seta e a cor dizem o sinal, para não depender só do "-". */
+  function celVariacao(v) {
+    if (!v) return '<td class="num"><span class="nada">—</span></td>';
+    if (!v.dif) return '<td class="num"><span class="nada">=</span></td>';
+    var cls = v.dif > 0 ? 'var-sobe' : 'var-cai';
+    var pct = v.pct == null ? '' : ' (' + (v.pct > 0 ? '+' : '') + G.num(v.pct, 0) + '%)';
+    return '<td class="num ' + cls + '">' + (v.dif > 0 ? '▲ +' : '▼ ') + G.num(v.dif) + pct + '</td>';
+  }
+
+  /** Agregados de inserção da seleção corrente, calculados uma vez e
+      guardados no contexto: as três abas de inserção leem o mesmo objeto. */
+  function insercoes(C) {
+    if (C._ins) return C._ins;
+
+    var dias = new Map();      // 'YYYY-MM-DD' -> { n, alim, mun }
+    var pessoas = new Map();   // inseridor    -> { n, dias, ini, fim, mun, mes }
+    var meses = new Map();     // 'YYYY-MM'    -> { n, dias }
+    var ultimo = '';
+
+    C.D.forEach(function (r) {
+      if (!r.d) return;
+      var quem = r.alim || NI, onde = r.mun || NI, ym = r.d.slice(0, 7);
+
+      var dia = dias.get(r.d);
+      if (!dia) dias.set(r.d, dia = { n: 0, alim: new Map(), mun: new Map() });
+      dia.n++;
+      dia.alim.set(quem, (dia.alim.get(quem) || 0) + 1);
+      dia.mun.set(onde, (dia.mun.get(onde) || 0) + 1);
+
+      var p = pessoas.get(quem);
+      if (!p) pessoas.set(quem, p = { n: 0, dias: new Set(), ini: r.d, fim: r.d, mun: new Map(), mes: new Map() });
+      p.n++;
+      p.dias.add(r.d);
+      if (r.d < p.ini) p.ini = r.d;
+      if (r.d > p.fim) p.fim = r.d;
+      p.mun.set(onde, (p.mun.get(onde) || 0) + 1);
+      p.mes.set(ym, (p.mes.get(ym) || 0) + 1);
+
+      var m = meses.get(ym);
+      if (!m) meses.set(ym, m = { n: 0, dias: new Set() });
+      m.n++;
+      m.dias.add(+r.d.slice(8, 10));
+      if (r.d > ultimo) ultimo = r.d;
+    });
+
+    var diasOrd = Array.from(dias.keys()).sort().map(function (iso, i, todos) {
+      var d = dias.get(iso), top = maisFrequente(d.alim);
+      return {
+        iso: iso, n: d.n,
+        semana: diaSemana(iso),
+        mun: maisFrequente(d.mun).rot,
+        alim: top.rot,
+        // participação do maior inseridor no dia: 100% = o dia foi de um só
+        part: d.n ? top.val / d.n * 100 : 0,
+        vari: variacao(d.n, i ? dias.get(todos[i - 1]).n : null)
+      };
+    });
+
+    var pessoasOrd = Array.from(pessoas, function (e) {
+      return {
+        rot: e[0], n: e[1].n, dias: e[1].dias.size, ini: e[1].ini, fim: e[1].fim,
+        mun: maisFrequente(e[1].mun).rot, mes: e[1].mes,
+        ritmo: e[1].dias.size ? e[1].n / e[1].dias.size : 0,
+        pct: C.D.length ? e[1].n / C.D.length * 100 : 0
+      };
+    }).sort(function (a, b) { return b.n - a.n || a.rot.localeCompare(b.rot, 'pt-BR'); });
+
+    /* Dias ÚTEIS sem inserção, como na planilha: sábado e domingo não contam
+       como falta, e o mês do último lançamento é medido só até ele — senão o
+       mês corrente apareceria devendo os dias que ainda não chegaram. */
+    var mesesOrd = Array.from(meses.keys()).sort().map(function (ym, i, todos) {
+      var m = meses.get(ym);
+      var ano = +ym.slice(0, 4), mes = +ym.slice(5, 7);
+      var limite = ym === ultimo.slice(0, 7) ? +ultimo.slice(8, 10) : diasNoMes(ano, mes);
+      var sem = [];
+      for (var d = 1; d <= limite; d++) {
+        if (!m.dias.has(d) && !fimDeSemana(ym + '-' + iso2(d))) sem.push(d);
+      }
+      return {
+        ym: ym, ano: ano, mes: mes, n: m.n,
+        com: Array.from(m.dias).sort(function (a, b) { return a - b; }),
+        sem: sem,
+        vari: variacao(m.n, i ? meses.get(todos[i - 1]).n : null)
+      };
+    });
+
+    /* Com mais de um exercício na seleção o ano entra no rótulo: no
+       consolidado o eixo mostrava quatro "Janeiro" iguais e não dava para
+       saber de que ano era cada coluna. */
+    var multiAno = new Set(mesesOrd.map(function (m) { return m.ano; })).size > 1;
+    var mesesChave = mesesOrd.map(function (m) { return m.ym; });
+    C._ins = {
+      dias: diasOrd, pessoas: pessoasOrd, meses: mesesOrd, mesesChave: mesesChave,
+      multiAno: multiAno,
+      rotulosMes: mesesOrd.map(function (m) {
+        return multiAno ? MESES[m.mes - 1] + '/' + m.ym.slice(2, 4) : mesLongo(m.ym);
+      }),
+      rotuloDia: function (iso) {
+        return iso.slice(8) + '/' + iso.slice(5, 7) + (multiAno ? '/' + iso.slice(2, 4) : '');
+      },
+      total: C.D.length, ultimo: ultimo,
+      pico: diasOrd.reduce(function (a, d) { return !a || d.n > a.n ? d : a; }, null),
+      picoMes: mesesOrd.reduce(function (a, m) { return !a || m.n > a.n ? m : a; }, null),
+      semInsercao: mesesOrd.reduce(function (a, m) { return a + m.sem.length; }, 0)
+    };
+    return C._ins;
+  }
+
+  /* ------------------------------------------- ABA: INSERÇÕES POR PESSOA */
+  function abaInsPessoa(C) {
+    var I = insercoes(C);
+    var top = I.pessoas[0];
+    var tres = I.pessoas.slice(0, 3).reduce(function (a, p) { return a + p.n; }, 0);
+    var maisDias = I.pessoas.slice().sort(function (a, b) { return b.dias - a.dias; })[0];
+    var maisRitmo = I.pessoas.filter(function (p) { return p.dias >= 3; })
+      .sort(function (a, b) { return b.ritmo - a.ritmo; })[0];
+
+    tiles('kpisInsPessoa', [
+      { _sec: 'Quem alimenta o formulário' },
+      { rot: 'Lançamentos no período', val: G.num(I.total), ir: 'registros' },
+      { rot: 'Inseridores', val: G.num(I.pessoas.length) },
+      { rot: 'Lançamentos por inseridor', val: G.num(I.pessoas.length ? I.total / I.pessoas.length : 0, 1) },
+      { rot: 'Dias com inserção', val: G.num(I.dias.length), ir: 'ins-dia' },
+      { rot: 'Lançamentos por dia ativo', val: G.num(I.dias.length ? I.total / I.dias.length : 0, 1) },
+      { rot: 'Meses com inserção', val: G.num(I.meses.length), ir: 'ins-mes' },
+
+      { _sec: 'Destaques' },
+      { rot: 'Mais lançamentos', val: top ? G.esc(top.rot) : '—', cls: 'texto',
+        sub: top ? G.num(top.n) + ' lançamentos (' + G.num(top.pct, 0) + '% do período)' : '' },
+      { rot: 'Mais dias ativos', val: maisDias ? G.esc(maisDias.rot) : '—', cls: 'texto',
+        sub: maisDias ? G.num(maisDias.dias) + ' dias com inserção' : '' },
+      { rot: 'Maior ritmo', val: maisRitmo ? G.esc(maisRitmo.rot) : '—', cls: 'texto',
+        sub: maisRitmo ? G.num(maisRitmo.ritmo, 1) + ' lançamentos por dia ativo' : 'a partir de 3 dias ativos' },
+      { rot: 'Concentração nos 3 maiores', val: G.num(I.total ? tres / I.total * 100 : 0, 0), un: '%',
+        sub: G.num(tres) + ' dos ' + G.num(I.total) + ' lançamentos' }
+    ]);
+
+    pintarCat('gInsPessoa', I.pessoas.map(function (p) { return { rot: p.rot, val: p.n }; }).slice(0, 14));
+    pintarCat('gInsPessoaRitmo', I.pessoas.slice(0, 14)
+      .map(function (p) { return { rot: p.rot, val: Math.round(p.ritmo * 10) / 10 }; })
+      .sort(function (a, b) { return b.val - a.val; }), { cor: 'var(--s3)' });
+
+    // uma série por inseridor do topo: mais de cinco e a paleta se repetiria
+    var ks = I.mesesChave;
+    pintarSerie('gInsPessoaMes', I.rotulosMes, I.pessoas.slice(0, 5).map(function (p, i) {
+      return { nome: p.rot, slot: i, valores: ks.map(function (k) { return p.mes.get(k) || null; }) };
+    }));
+
+    tabelaInsPessoa(I);
+  }
+
+  function tabelaInsPessoa(I) {
+    if (!el('tInsPessoa')) return;
+    if (!I.pessoas.length) return G.vazio(el('tInsPessoa'));
+    el('tInsPessoa').innerHTML = '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
+      '<th>#</th><th>Inseridor</th><th>Lançamentos</th><th>Participação</th><th>Dias ativos</th>' +
+      '<th>Por dia ativo</th><th>Primeiro</th><th>Último</th><th>Município que mais lançou</th>' +
+      '</tr></thead><tbody>' +
+      I.pessoas.map(function (p, i) {
+        return '<tr><td class="num">' + (i + 1) + '</td><td class="forte">' + G.esc(p.rot) + '</td>' +
+          '<td class="num">' + G.num(p.n) + '</td><td class="num">' + G.num(p.pct, 1) + '%</td>' +
+          '<td class="num">' + G.num(p.dias) + '</td><td class="num">' + G.num(p.ritmo, 1) + '</td>' +
+          '<td class="num">' + dataBR(p.ini) + '</td><td class="num">' + dataBR(p.fim) + '</td>' +
+          '<td>' + G.esc(p.mun || '—') + '</td></tr>';
+      }).join('') +
+      '<tr><td></td><td class="forte">Total</td><td class="num forte">' + G.num(I.total) + '</td>' +
+      '<td class="num forte">100,0%</td><td class="num forte">' + G.num(I.dias.length) + '</td>' +
+      '<td class="num forte">' + G.num(I.dias.length ? I.total / I.dias.length : 0, 1) + '</td>' +
+      '<td colspan="3"></td></tr></tbody></table></div>';
+  }
+
+  /* ---------------------------------------------- ABA: INSERÇÕES POR DIA */
+  var buscaDia = '';
+
+  function abaInsDia(C) {
+    var I = insercoes(C);
+    var ultimoDia = I.dias[I.dias.length - 1];
+    var maiorSeq = sequenciaUteis(I.dias);
+
+    tiles('kpisInsDia', [
+      { _sec: 'Ritmo diário' },
+      { rot: 'Lançamentos no período', val: G.num(I.total), ir: 'registros' },
+      { rot: 'Dias com inserção', val: G.num(I.dias.length) },
+      { rot: 'Lançamentos por dia ativo', val: G.num(I.dias.length ? I.total / I.dias.length : 0, 1) },
+      { rot: 'Dias úteis sem inserção', val: G.num(I.semInsercao), ir: 'ins-mes',
+        sub: 'sábados e domingos não contam' },
+      { rot: 'Maior sequência de dias úteis', val: G.num(maiorSeq), sub: 'dias úteis seguidos com inserção' },
+      { rot: 'Inseridores ativos', val: G.num(I.pessoas.length), ir: 'ins-pessoa' },
+
+      { _sec: 'Destaques' },
+      { rot: 'Dia de pico', val: I.pico ? dataBR(I.pico.iso) : '—', cls: 'texto',
+        sub: I.pico ? G.num(I.pico.n) + ' lançamentos · ' + G.esc(I.pico.mun) : '' },
+      { rot: 'Inseridor do dia de pico', val: I.pico ? G.esc(I.pico.alim) : '—', cls: 'texto',
+        sub: I.pico ? G.num(I.pico.part, 0) + '% do que entrou no dia' : '' },
+      { rot: 'Último lançamento', val: ultimoDia ? dataBR(ultimoDia.iso) : '—', cls: 'texto',
+        sub: ultimoDia ? G.num(ultimoDia.n) + ' lançamentos no dia' : '' },
+      { rot: 'Dia da semana mais forte', val: G.esc(diaSemanaTop(I).rot || '—'), cls: 'texto',
+        sub: G.num(diaSemanaTop(I).val) + ' lançamentos' }
+    ]);
+
+    pintarSerie('gInsDiaSerie', I.dias.map(function (d) { return I.rotuloDia(d.iso); }),
+      [{ nome: 'Lançamentos', slot: 0, valores: I.dias.map(function (d) { return d.n; }) }]);
+
+    var semana = new Map();
+    DIAS_SEMANA.forEach(function (s) { semana.set(s, 0); });
+    I.dias.forEach(function (d) { semana.set(DIAS_SEMANA[d.semana], semana.get(DIAS_SEMANA[d.semana]) + d.n); });
+    pintarCat('gInsDiaSemana', Array.from(semana, function (e) { return { rot: e[0], val: e[1] }; })
+      .filter(function (d) { return d.val > 0; }));
+
+    var CORTES = [
+      { rot: '1 lançamento', max: 1 }, { rot: '2 a 5', max: 5 }, { rot: '6 a 10', max: 10 },
+      { rot: '11 a 20', max: 20 }, { rot: 'mais de 20', max: Infinity }
+    ];
+    var faixa = new Map();
+    CORTES.forEach(function (c) { faixa.set(c.rot, 0); });
+    I.dias.forEach(function (d) {
+      for (var i = 0; i < CORTES.length; i++) {
+        if (d.n <= CORTES[i].max) { faixa.set(CORTES[i].rot, faixa.get(CORTES[i].rot) + 1); break; }
+      }
+    });
+    pintarCat('gInsDiaFaixa', Array.from(faixa, function (e) { return { rot: e[0], val: e[1] }; })
+      .filter(function (d) { return d.val > 0; }), { cor: 'var(--s3)' });
+
+    tabelaInsDia(I);
+  }
+
+  /** Maior sequência de dias ÚTEIS seguidos com inserção. Um fim de semana no
+      meio não quebra a sequência: ninguém lança no sábado. */
+  function sequenciaUteis(dias) {
+    var maior = 0, atual = 0, anterior = null;
+    dias.forEach(function (d) {
+      if (fimDeSemana(d.iso)) return;
+      if (anterior && uteisEntre(anterior, d.iso) > 1) atual = 0;
+      atual++;
+      anterior = d.iso;
+      if (atual > maior) maior = atual;
+    });
+    return maior;
+  }
+
+  /** Distância em dias úteis entre duas datas ISO (1 = são consecutivos). */
+  function uteisEntre(a, b) {
+    var ini = new Date(a + 'T12:00:00Z'), fim = new Date(b + 'T12:00:00Z'), n = 0;
+    while (ini < fim && n < 400) {
+      ini.setUTCDate(ini.getUTCDate() + 1);
+      if (ini.getUTCDay() !== 0 && ini.getUTCDay() !== 6) n++;
+    }
+    return n;
+  }
+
+  function diaSemanaTop(I) {
+    var m = new Map();
+    I.dias.forEach(function (d) {
+      var k = DIAS_SEMANA[d.semana];
+      m.set(k, (m.get(k) || 0) + d.n);
+    });
+    return maisFrequente(m);
+  }
+
+  function tabelaInsDia(I) {
+    if (!el('tInsDia')) return;
+    var busca = buscaDia.toLowerCase();
+    var linhas = I.dias.slice().reverse().filter(function (d) {
+      if (!busca) return true;
+      return (dataBR(d.iso) + ' ' + mesLongo(d.iso.slice(0, 7)) + ' ' + d.mun + ' ' + d.alim)
+        .toLowerCase().indexOf(busca) >= 0;
+    });
+    if (!linhas.length) return G.vazio(el('tInsDia'), busca ? 'Nenhum dia encontrado para essa busca.' : null);
+    el('tInsDia').innerHTML = '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
+      '<th>Mês</th><th>Data</th><th>Dia</th><th>Lançamentos</th><th>Variação</th>' +
+      '<th>Local que mais lançou</th><th>Inseridor</th><th>Participação</th>' +
+      '</tr></thead><tbody>' +
+      linhas.map(function (d) {
+        var pico = I.pico && d.iso === I.pico.iso;
+        return '<tr' + (pico ? ' class="destaque-linha"' : '') + '>' +
+          '<td>' + mesLongo(d.iso.slice(0, 7)) + '</td>' +
+          '<td class="num forte">' + dataBR(d.iso) + '</td>' +
+          '<td>' + DIAS_SEMANA[d.semana] + '</td>' +
+          '<td class="num">' + G.num(d.n) + '</td>' +
+          celVariacao(d.vari) +
+          '<td>' + G.esc(d.mun || '—') + '</td>' +
+          '<td>' + G.esc(d.alim || '—') + '</td>' +
+          '<td class="num">' + G.num(d.part, 0) + '%</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p class="nota">' + G.num(linhas.length) + ' dias com inserção' +
+      (busca ? ' na busca' : '') + ' · o dia de pico aparece destacado.</p>';
+  }
+
+  /* ---------------------------------------------- ABA: INSERÇÕES POR MÊS */
+  function abaInsMes(C) {
+    var I = insercoes(C);
+    var ultimoMes = I.meses[I.meses.length - 1];
+    var diasCom = I.meses.reduce(function (a, m) { return a + m.com.length; }, 0);
+
+    tiles('kpisInsMes', [
+      { _sec: 'Volume mensal' },
+      { rot: 'Lançamentos no período', val: G.num(I.total), ir: 'registros' },
+      { rot: 'Meses com inserção', val: G.num(I.meses.length) },
+      { rot: 'Média por mês', val: G.num(I.meses.length ? I.total / I.meses.length : 0, 1) },
+      { rot: 'Dias úteis com inserção', val: G.num(diasCom), ir: 'ins-dia' },
+      { rot: 'Dias úteis sem inserção', val: G.num(I.semInsercao) },
+      { rot: 'Inseridores ativos', val: G.num(I.pessoas.length), ir: 'ins-pessoa' },
+
+      { _sec: 'Destaques' },
+      { rot: 'Mês de pico', val: I.picoMes ? G.esc(mesLongo(I.picoMes.ym)) : '—', cls: 'texto',
+        sub: I.picoMes ? G.num(I.picoMes.n) + ' lançamentos em ' + I.picoMes.ano : '' },
+      { rot: 'Último mês', val: ultimoMes ? G.esc(mesLongo(ultimoMes.ym)) : '—', cls: 'texto',
+        sub: ultimoMes ? G.num(ultimoMes.n) + ' lançamentos' : '' },
+      { rot: 'Variação do último mês',
+        val: ultimoMes && ultimoMes.vari && ultimoMes.vari.pct != null
+          ? (ultimoMes.vari.pct > 0 ? '+' : '') + G.num(ultimoMes.vari.pct, 0) : '—',
+        un: ultimoMes && ultimoMes.vari && ultimoMes.vari.pct != null ? '%' : '',
+        cls: ultimoMes && ultimoMes.vari && ultimoMes.vari.dif < 0 ? 'acu' : 'mec',
+        sub: 'sobre o mês anterior' },
+      { rot: 'Média por dia com inserção', val: G.num(diasCom ? I.total / diasCom : 0, 1) }
+    ]);
+
+    pintarSerie('gInsMesSerie', I.rotulosMes,
+      [{ nome: 'Lançamentos', slot: 0, valores: I.meses.map(function (m) { return m.n; }) }]);
+    pintarSerie('gInsMesDias', I.rotulosMes, [
+      { nome: 'Dias com inserção', slot: 0, valores: I.meses.map(function (m) { return m.com.length; }) },
+      { nome: 'Dias úteis sem inserção', slot: 1, valores: I.meses.map(function (m) { return m.sem.length; }) }
+    ]);
+
+    tabelaInsMes(I);
+  }
+
+  function tabelaInsMes(I) {
+    if (!el('tInsMes')) return;
+    if (!I.meses.length) return G.vazio(el('tInsMes'));
+    var lista = function (dias) {
+      return dias.length ? dias.join(', ') : '<span class="nada">—</span>';
+    };
+    el('tInsMes').innerHTML = '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
+      '<th>Ano</th><th>Mês</th><th>Lançamentos</th><th>Variação</th><th>Dias com</th><th>Dias úteis sem</th>' +
+      '<th>Dias com inserção</th><th>Dias úteis sem inserção</th>' +
+      '</tr></thead><tbody>' +
+      I.meses.map(function (m) {
+        return '<tr><td class="num">' + m.ano + '</td><td class="forte">' + mesLongo(m.ym) + '</td>' +
+          '<td class="num">' + G.num(m.n) + '</td>' + celVariacao(m.vari) +
+          '<td class="num">' + G.num(m.com.length) + '</td>' +
+          '<td class="num">' + G.num(m.sem.length) + '</td>' +
+          '<td class="miudo">' + lista(m.com) + '</td>' +
+          '<td class="miudo">' + lista(m.sem) + '</td></tr>';
+      }).join('') +
+      '<tr><td></td><td class="forte">Total</td><td class="num forte">' + G.num(I.total) + '</td><td></td>' +
+      '<td class="num forte">' + G.num(I.meses.reduce(function (a, m) { return a + m.com.length; }, 0)) + '</td>' +
+      '<td class="num forte">' + G.num(I.semInsercao) + '</td><td colspan="2"></td></tr>' +
+      '</tbody></table></div>';
+  }
+
+  /* --------------------------------------------------- ABA: CULTURAS ---- */
+  function abaInsCultura(C) {
+    var lista = ranking(C.areaCult);
+    var haMed = lista.length ? C.haCult / lista.length : 0;
+    var semArea = C.nCult - C.D.reduce(function (a, r) {
+      return a + r.cult.filter(function (c) { return c[1] > 0; }).length;
+    }, 0);
+
+    tiles('kpisInsCult', [
+      { _sec: 'Culturas declaradas' },
+      { rot: 'Culturas diferentes', val: G.num(lista.length), cls: 'mec' },
+      { rot: 'Hectares declarados', val: G.num(C.haCult, 1), un: 'ha', cls: 'mec',
+        sub: G.num(C.nCult) + ' declarações' },
+      { rot: 'Hectares mecanizados', val: G.num(C.ha, 1), un: 'ha', cls: 'mec', ir: 'mecanizacao',
+        sub: 'campo Total mecanizado' },
+      { rot: 'Média por cultura', val: G.num(haMed, 1), un: 'ha' },
+      { rot: 'Lançamentos com cultura', val: G.num(C.nComCult), ir: 'registros',
+        sub: G.num(C.D.length ? C.nComCult / C.D.length * 100 : 0, 0) + '% dos lançamentos' },
+      { rot: 'Declarações sem área', val: G.num(semArea) },
+
+      { _sec: 'Destaques' },
+      { rot: 'Maior área', val: C.topCult ? G.esc(C.topCult.rot) : '—', cls: 'mec texto', ir: 'cultura',
+        sub: C.topCult ? G.num(C.topCult.val, 1) + ' ha (' +
+          G.num(C.haCult ? C.topCult.val / C.haCult * 100 : 0, 0) + '% do total)' : '' },
+      { rot: 'Mais declarada', val: C.topCultQtd ? G.esc(C.topCultQtd.rot) : '—', cls: 'mec texto', ir: 'cultura',
+        sub: C.topCultQtd ? G.num(C.topCultQtd.val) + ' declarações' : '' },
+      { rot: 'Sistema de cultivo mais comum', val: C.topSis ? G.esc(C.topSis.rot) : '—', cls: 'texto',
+        sub: C.topSis ? G.num(C.topSis.val) + ' declarações' : '' },
+      { rot: 'Concentração nas 3 maiores',
+        val: G.num(C.haCult ? lista.slice(0, 3).reduce(function (a, d) { return a + d.val; }, 0) / C.haCult * 100 : 0, 0),
+        un: '%' }
+    ]);
+
+    pintarCat('gInsCultHa', lista.slice(0, 16));
+    pintarCat('gInsCultQtd', ranking(C.qtdCult, 16), { cor: 'var(--s3)' });
+    tabelaInsCultura(lista, C);
+  }
+
+  function tabelaInsCultura(lista, C) {
+    if (!el('tInsCult')) return;
+    if (!lista.length) return G.vazio(el('tInsCult'));
+    var acum = 0;
+    el('tInsCult').innerHTML = '<div class="tabela-scroll"><table class="dados"><thead><tr>' +
+      '<th>#</th><th>Cultura</th><th>Total de hectares</th><th>Participação</th><th>Acumulado</th>' +
+      '<th>Declarações</th><th>Média por declaração</th>' +
+      '</tr></thead><tbody>' +
+      lista.map(function (d, i) {
+        var pct = C.haCult ? d.val / C.haCult * 100 : 0;
+        var qtd = C.qtdCult.get(d.rot) || 0;
+        acum += pct;
+        return '<tr><td class="num">' + (i + 1) + '</td><td class="forte">' + G.esc(d.rot) + '</td>' +
+          '<td class="num">' + G.num(d.val, 2) + '</td><td class="num">' + G.num(pct, 1) + '%</td>' +
+          '<td class="num">' + G.num(acum, 1) + '%</td><td class="num">' + G.num(qtd) + '</td>' +
+          '<td class="num">' + G.num(qtd ? d.val / qtd : 0, 1) + '</td></tr>';
+      }).join('') +
+      '<tr><td></td><td class="forte">Total</td><td class="num forte">' + G.num(C.haCult, 2) + '</td>' +
+      '<td class="num forte">100,0%</td><td></td><td class="num forte">' + G.num(C.nCult) + '</td>' +
+      '<td class="num forte">' + G.num(C.nCult ? C.haCult / C.nCult : 0, 1) + '</td></tr>' +
+      '</tbody></table></div>' +
+      /* A planilha soma numa linha "Não informado" as declarações sem cultura
+         escrita; aqui elas não viram categoria, então o total fica abaixo do
+         da aba "culturas" exatamente nesse tanto. Dizer isso evita a conclusão
+         de que um dos dois está errado. */
+      '<p class="nota">As declarações sem cultura informada não entram nesta soma. ' +
+      'Na planilha <em>culturas</em> elas aparecem como uma linha "Não informado", ' +
+      'e é só nisso que os dois totais diferem.</p>';
+  }
+
   /* ============================================ ABA: ATUALIZAR DADOS (admin) */
   function abaAdmin() {
     fonteDados();
@@ -2046,7 +2500,10 @@
     geral: abaGeral, mecanizacao: abaMecanizacao, acudagem: abaAcudagem,
     cultura: abaCultura, municipio: abaMunicipio, escritorio: abaEscritorio,
     beneficiario: abaBeneficiario, registros: abaRegistros,
-    relatorio: abaRelatorio, admin: abaAdmin
+    relatorio: abaRelatorio, admin: abaAdmin,
+    // só aparecem com a senha (ver aplicarAdmin)
+    'ins-pessoa': abaInsPessoa, 'ins-dia': abaInsDia, 'ins-mes': abaInsMes,
+    'ins-cultura': abaInsCultura
   };
 
   /** Desenha a aba visível. As demais só quando forem abertas. */
@@ -2644,7 +3101,8 @@
       ADMIN_LOCAL = sessionStorage.getItem('seagri_admin') === 'local';
       MOTIVO_LOCAL = sessionStorage.getItem('seagri_admin_motivo') || '';
     } catch (e) { /* privado */ }
-    el('abaAdmin').hidden = !on;
+    // "Atualizar dados" e as quatro abas de inserção: todas marcadas .aba-admin
+    document.querySelectorAll('.aba-admin').forEach(function (b) { b.hidden = !on; });
     el('adminBtn').innerHTML = on ? '&#9989;<span>Admin (sair)</span>' : '&#128274;<span>Admin</span>';
     // sem servidor não há o que publicar: o botão sai de cena em vez de falhar
     var aplicar = el('upAplicar');
@@ -2665,8 +3123,9 @@
           'XAMPP, ou <code>php -S localhost:8734 -t .</code> na raiz do projeto.</p>'
         : '';
     }
-    if (!on && document.querySelector('.aba.ativa') &&
-      document.querySelector('.aba.ativa').getAttribute('data-aba') === 'admin') abrirAba('geral');
+    // saiu do admin estando numa aba restrita: volta para a visão geral
+    var ativa = document.querySelector('.aba.ativa');
+    if (!on && ativa && ativa.classList.contains('aba-admin')) abrirAba('geral');
     if (window._sidebarRefreshAdmin) window._sidebarRefreshAdmin();
   }
   function abrirModal() {
@@ -3106,6 +3565,13 @@
     aplicarVisRelatorio();
   });
   el('relatorBusca').addEventListener('input', aplicarBuscaRelatorio);
+  /* Busca do dia a dia: só a tabela é refeita, não a aba inteira — os
+     gráficos ao lado mostram o período todo, e piscar a cada tecla seria
+     trabalho jogado fora. */
+  el('buscaInsDia').addEventListener('input', atrasar(function (e) {
+    buscaDia = e.target.value.trim();
+    if (CTX) tabelaInsDia(insercoes(CTX));
+  }, 180));
   window.addEventListener('resize', (function () {
     var t;
     return function () {

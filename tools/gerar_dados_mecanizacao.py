@@ -8,6 +8,9 @@ Uso (na raiz do projeto):
 Somente a aba "dados" e considerada. Campos sensiveis (CPF, telefone,
 data de nascimento, e-mail) NAO sao exportados: o CPF e usado apenas para
 gerar um id anonimo de produtor, que permite contar produtores distintos.
+Do e-mail sai so o usuario (o que vem antes do @), que e o "alimentador" —
+quem lancou a linha. E o mesmo rotulo que as abas "Insercoes por ..." da
+planilha usam, e alimenta as abas de insercao do painel (visiveis so ao admin).
 """
 import io
 import json
@@ -125,6 +128,21 @@ def norm_estado_civil(s):
     return NAO_INF
 
 
+def norm_alimentador(*valores):
+    """Quem lancou a linha, a partir do e-mail: so o usuario, capitalizado a
+    cada trecho — 'lucaspaiva.agro2011@ac.gov.br' vira 'Lucaspaiva.Agro2011'.
+    E exatamente como as abas de insercao da planilha nomeiam essa pessoa,
+    entao o ranking do painel e o do Excel podem ser conferidos lado a lado."""
+    for v in valores:
+        t = texto(v)
+        if "@" in t:
+            u = t.split("@")[0].strip()
+            if u:
+                # capitaliza depois de cada ponto, hifen ou sublinhado
+                return "".join(p[:1].upper() + p[1:] for p in re.split(r"(?<=[._-])", u))
+    return NAO_INF
+
+
 def norm_tecnico(s):
     s = texto(s)
     if s.isupper():
@@ -194,8 +212,15 @@ def main():
         achados = [i for i, h in enumerate(cab) if h == nome]
         return achados[ocorrencia]
 
+    def idx_opc(nome):
+        """Coluna que pode nao existir em exportacoes mais antigas."""
+        achados = [i for i, h in enumerate(cab) if h == nome]
+        return achados[0] if achados else -1
+
     I = {
         "carimbo": idx("Carimbo de data/hora"),
+        "email": idx_opc("Endereço de e-mail"),
+        "email2": idx_opc("Email"),
         "escritorio": idx("Escritório Local"),
         "vistoria": idx("Data da Vistoria"),
         "tecnico": idx("Nome do responsável técnico"),
@@ -236,7 +261,7 @@ def main():
     for r in dados:
         def v(k):
             j = I[k]
-            return r[j] if j < len(r) else None
+            return r[j] if 0 <= j < len(r) else None   # -1 = coluna ausente
 
         cpf = texto(v("cpf"))
         if not re.fullmatch(r"\d{3}\.\d{3}\.\d{3}-\d{2}", cpf) or cpf == "***.***.***-**":
@@ -290,6 +315,7 @@ def main():
             "mun": rotulo(v("municipio")),
             "esc": norm_escritorio(v("escritorio")),
             "rt": norm_tecnico(v("tecnico")),
+            "alim": norm_alimentador(v("email"), v("email2")),
             "prod": titulo(texto(v("produtor"))) if texto(v("produtor")).isupper() else texto(v("produtor")),
             "pid": pid,
             "sexo": rotulo(v("sexo")),

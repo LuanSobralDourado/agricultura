@@ -179,6 +179,25 @@
     if (c.indexOf('separado') === 0) return 'Separado(a)';
     return NI;
   }
+  /** Quem lançou a linha, tirado do e-mail: só o usuário, capitalizado a cada
+      trecho ('lucaspaiva.agro2011@ac.gov.br' → 'Lucaspaiva.Agro2011'). É como
+      as abas de inserção da planilha nomeiam essa pessoa, então os dois
+      rankings podem ser conferidos lado a lado. Espelha norm_alimentador()
+      de tools/gerar_dados_mecanizacao.py. */
+  function normAlimentador() {
+    for (var i = 0; i < arguments.length; i++) {
+      var t = txt(arguments[i]);
+      if (t.indexOf('@') > 0) {
+        var u = t.split('@')[0].trim();
+        if (u) {
+          return u.replace(/(^|[._-])([a-zà-ú])/g, function (_, sep, letra) {
+            return sep + letra.toUpperCase();
+          });
+        }
+      }
+    }
+    return NI;
+  }
   function normTecnico(s) {
     s = txt(s);
     if (ehMaiuscula(s)) s = titulo(s);
@@ -241,8 +260,16 @@
       return i;
     }
 
+    /** Coluna que pode não existir em exportações mais antigas. */
+    function idxOpc(nome) {
+      var i = cab.indexOf(nome);
+      return i < 0 ? -1 : i;
+    }
+
     var I = {
-      carimbo: idx('Carimbo de data/hora'), escritorio: idx('Escritório Local'),
+      carimbo: idx('Carimbo de data/hora'),
+      email: idxOpc('Endereço de e-mail'), email2: idxOpc('Email'),
+      escritorio: idx('Escritório Local'),
       vistoria: idx('Data da Vistoria'), tecnico: idx('Nome do responsável técnico'),
       produtor: idx('Nome do produtor'), sexo: idx('Sexo'), cpf: idx('CPF'),
       civil: idx('Estado Civil'), assoc: idx('Nome da Associação/Cooperativa:'),
@@ -308,6 +335,7 @@
         d: data, ex: data.slice(0, 4), dv: vistoria,
         pc: rotulo(r[I.ponto]), mun: rotulo(r[I.municipio]), esc: normEscritorio(r[I.escritorio]),
         rt: normTecnico(r[I.tecnico]),
+        alim: normAlimentador(I.email < 0 ? '' : r[I.email], I.email2 < 0 ? '' : r[I.email2]),
         prod: ehMaiuscula(prod) ? titulo(prod) : prod,
         pid: pid, sexo: rotulo(r[I.sexo]), ec: normEstadoCivil(r[I.civil]),
         dap: ['Sim', 'Não', 'Vencida'].indexOf(dapBruto) >= 0 ? dapBruto : NI,
