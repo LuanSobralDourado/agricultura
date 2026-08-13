@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEAGRI - Painel do DEAGRO</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<meta name="theme-color" content="#1b5e20">
+<meta property="og:title" content="SEAGRI &ndash; Painel do DEAGRO">
+<meta property="og:description" content="Painel do Departamento de Agroneg&oacute;cio da SEAGRI/AC &mdash; caf&eacute;, armazenagem, calc&aacute;rio, incuba&ccedil;&atilde;o, pecu&aacute;ria, usina de nitrog&ecirc;nio e capacita&ccedil;&otilde;es.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="../assets/brasao.png">
+<link rel="stylesheet" href="../css/base.css?v=2026081302">
+<link rel="stylesheet" href="../css/dashboard.css?v=2026081302">
+<link rel="stylesheet" href="../css/deagro.css?v=2026081302">
+<script>
+  /* aplica o tema antes da pintura para não piscar branco */
+  (function () {
+    try {
+      var t = localStorage.getItem('seagri_tema');
+      if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+      document.documentElement.setAttribute('data-tema', t);
+    } catch (e) { document.documentElement.setAttribute('data-tema', 'claro'); }
+  })();
+</script>
+</head>
+<body>
+<nav class="sidebar open" id="sidebar">
+  <div class="sidebar-head">
+    <div class="sidebar-head-info">
+      <div class="sidebar-head-sub">Agricultura</div>
+      <div class="sidebar-head-title">Sistema Interno</div>
+    </div>
+  </div>
+  <div class="sidebar-nav">
+    <a class="sidebar-link" href="index.html" data-page="index">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      In&iacute;cio
+    </a>
+    <a class="sidebar-link" href="organograma.html" data-page="organograma">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><rect x="1" y="17" width="6" height="4" rx="1"/><rect x="9" y="17" width="6" height="4" rx="1"/><rect x="17" y="17" width="6" height="4" rx="1"/><path d="M12 6v5M4 17v-4h16v4"/></svg>
+      Organograma
+    </a>
+    <a class="sidebar-link" href="portarias.html" data-page="portarias">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Portarias
+    </a>
+    <a class="sidebar-link" href="dashboards.html" data-page="dashboards" data-paginas="dashboards dashboard deagro">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboards
+    </a>
+    <a class="sidebar-link" href="chamados.html" data-page="chamados" id="sidebarLinkChamados">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Chamados
+    </a>
+    <a class="sidebar-link" href="contatos.html" data-page="contatos" id="sidebarLinkContatos">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      Contatos
+    </a>
+  </div>
+  <div class="sidebar-foot">SEAGRI &mdash; Secretaria de Agricultura</div>
+</nav>
+<button class="sidebar-expand" aria-label="Abrir menu">&#9654;</button>
+<script src="../js/sidebar.js?v=2026081302"></script>
+<script>
+/* no painel a barra lateral começa recolhida — maximiza a área de dados */
+(function(){
+  var s=document.getElementById('sidebar');
+  if(s) s.classList.remove('open');
+  document.body.classList.remove('sidebar-open');
+})();
+</script>
+
+<header>
+  <h1>Painel do DEAGRO</h1>
+  <p>Departamento de Agroneg&oacute;cio &middot; Secretaria de Agricultura do Acre</p>
+  <div class="header-acoes">
+    <a class="tema-btn" href="dashboards.html">&#8592;<span>Pain&eacute;is</span></a>
+    <button class="tema-btn" id="temaBtn" type="button" aria-label="Alternar tema"></button>
+  </div>
+</header>
+
+<!-- ------------------------------------------------------------ menu de abas
+     As abas seguem os PROGRAMAS, não a lista de divisões: usina de nitrogênio,
+     calcário e café sozinhos são 57% da base e ficavam espremidos dentro das
+     abas das suas divisões. A atividade técnica é a mesma planilha repetida em
+     três divisões, então vira uma aba só, com recorte por divisão. -->
+<nav class="abas" id="abas" aria-label="Se&ccedil;&otilde;es do painel">
+  <div class="abas-pista" role="tablist" aria-label="Se&ccedil;&otilde;es do painel">
+    <button class="aba" data-aba="geral" type="button" role="tab" id="aba-geral" aria-controls="painel-geral" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      Vis&atilde;o geral
+    </button>
+    <button class="aba" data-aba="cafe" type="button" role="tab" id="aba-cafe" aria-controls="painel-cafe" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13v5a5 5 0 01-5 5H9a5 5 0 01-5-5z"/><path d="M17 10h1.5a2.5 2.5 0 010 5H17"/><path d="M8 3v3M12 2.5V6"/></svg>
+      Caf&eacute;
+    </button>
+    <button class="aba" data-aba="armazenagem" type="button" role="tab" id="aba-armazenagem" aria-controls="painel-armazenagem" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V9a4 4 0 018 0v12"/><path d="M5 12h8"/><path d="M16 21V7l4-3v17"/><path d="M3 21h18"/></svg>
+      Armazenagem
+    </button>
+    <button class="aba" data-aba="aquicultura" type="button" role="tab" id="aba-aquicultura" aria-controls="painel-aquicultura" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c3-4 7-6 11-6 3.5 0 6 1.5 8 3.5-2 2-4.5 4.5-8 4.5-4 0-8-2-11-2z"/><circle cx="16" cy="10.5" r=".8" fill="currentColor"/><path d="M2 12l3 3M2 12l3-3"/></svg>
+      Aquicultura e Pesca
+    </button>
+    <button class="aba" data-aba="incubacao" type="button" role="tab" id="aba-incubacao" aria-controls="painel-incubacao" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c3.5 4 6 8 6 11a6 6 0 01-12 0c0-3 2.5-7 6-11z"/></svg>
+      Central de Incuba&ccedil;&atilde;o
+    </button>
+    <button class="aba" data-aba="calcario" type="button" role="tab" id="aba-calcario" aria-controls="painel-calcario" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M12 4l8 16H4z"/><path d="M9.2 13.5h5.6"/></svg>
+      Calc&aacute;rio
+    </button>
+    <button class="aba" data-aba="pecefic" type="button" role="tab" id="aba-pecefic" aria-controls="painel-pecefic" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6c0 4 2 6 4 7M20 6c0 4-2 6-4 7"/><path d="M8 13h8v3a4 4 0 01-8 0z"/><path d="M10 17.5v3M14 17.5v3"/></svg>
+      Pecu&aacute;ria Eficiente
+    </button>
+    <button class="aba" data-aba="genetica" type="button" role="tab" id="aba-genetica" aria-controls="painel-genetica" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3c0 6 10 12 10 18M17 3c0 6-10 12-10 18"/><path d="M8.5 7h7M8.5 17h7M7.6 12h8.8"/></svg>
+      Melhoramento gen&eacute;tico
+    </button>
+    <button class="aba" data-aba="usina" type="button" role="tab" id="aba-usina" aria-controls="painel-usina" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6v6l3 5v7a2 2 0 01-2 2H8a2 2 0 01-2-2v-7l3-5z"/><path d="M6.5 14h11"/></svg>
+      Usina de nitrog&ecirc;nio
+    </button>
+    <button class="aba" data-aba="atividade" type="button" role="tab" id="aba-atividade" aria-controls="painel-atividade" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Atividade t&eacute;cnica
+    </button>
+    <button class="aba" data-aba="cursos" type="button" role="tab" id="aba-cursos" aria-controls="painel-cursos" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 8l10 5 10-5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/></svg>
+      Cursos
+    </button>
+    <button class="aba" data-aba="eventos" type="button" role="tab" id="aba-eventos" aria-controls="painel-eventos" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/><path d="M8 14h4"/></svg>
+      Eventos
+    </button>
+    <button class="aba" data-aba="municipio" type="button" role="tab" id="aba-municipio" aria-controls="painel-municipio" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V9l6-4 6 4 6-3v15z"/><path d="M9 5v16M15 9v12"/></svg>
+      Munic&iacute;pios
+    </button>
+    <button class="aba" data-aba="beneficiario" type="button" role="tab" id="aba-beneficiario" aria-controls="painel-beneficiario" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+      Benefici&aacute;rios
+    </button>
+    <button class="aba" data-aba="registros" type="button" role="tab" id="aba-registros" aria-controls="painel-registros" aria-selected="false" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Registros
+    </button>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- ------------------------------------------------------------- filtros -->
+  <section class="filtros" aria-label="Filtros">
+    <div class="filtro">
+      <span class="filtro-rot" id="rotAno">Ano</span>
+      <div class="multi" id="fAno"></div>
+    </div>
+    <div class="filtro">
+      <span class="filtro-rot" id="rotReg">Regional</span>
+      <div class="multi" id="fReg"></div>
+    </div>
+    <div class="filtro">
+      <span class="filtro-rot" id="rotMun">Munic&iacute;pio</span>
+      <div class="multi" id="fMun"></div>
+    </div>
+    <div class="filtro">
+      <label for="buscaNome">Produtor ou t&eacute;cnico</label>
+      <input type="search" id="buscaNome" class="campo-busca" autocomplete="off" placeholder="Buscar pelo nome&hellip;">
+    </div>
+    <div class="filtros-acoes">
+      <button class="btn" id="btnLimpar" type="button">Limpar filtros</button>
+    </div>
+    <p class="filtro-resumo" id="resumo" role="status" aria-live="polite"></p>
+    <p class="filtro-nota" id="fonte"></p>
+  </section>
+
+  <div class="conteudo-abas">
+
+  <!-- ==================================================== ABA: VISÃO GERAL -->
+  <div class="aba-conteudo" data-aba="geral" role="tabpanel" id="painel-geral" aria-labelledby="aba-geral" tabindex="0">
+    <section class="kpis" id="kpisGeral" aria-label="Indicadores principais"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Registros por programa</h2>
+          <p class="sub">Como o volume se reparte entre os programas do departamento. Clique num programa para abrir a aba dele.</p>
+        </div></div>
+        <div id="gAssunto" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="assunto"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Registros por divis&atilde;o</h2>
+          <p class="sub">Estrutura do departamento na planilha.</p>
+        </div></div>
+        <div id="gDivisao" data-tipos="rosca,pizza,barras,colunas,tabela" data-clique="div"></div>
+      </section>
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por munic&iacute;pio</h2>
+          <p class="sub">Registros com munic&iacute;pio informado, somando todos os programas. Clique num munic&iacute;pio para filtrar.</p>
+        </div></div>
+        <div id="gMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Regionais de desenvolvimento</h2>
+          <p class="sub">Munic&iacute;pios agrupados pelas regionais do Acre.</p>
+        </div></div>
+        <div id="gRegional" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="reg"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Registros por ano</h2>
+          <p class="sub">Linha do tempo dos lan&ccedil;amentos com data. Clique num ano para filtrar.</p>
+        </div></div>
+        <div id="gAno" data-tipos="colunas,linha,area,tabela" data-clique="ano"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico por sexo</h2>
+          <p class="sub">Produtores e produtoras nos registros que trazem o campo.</p>
+        </div></div>
+        <div id="gSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Maiores bases</h2>
+          <p class="sub">As planilhas com mais linhas dentro do recorte.</p>
+        </div></div>
+        <div id="gConjuntos" data-tipos="barras,tabela"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>O que o painel cobre</h2>
+          <p class="sub">Cada linha &eacute; uma base da planilha do DEAGRO. Clique para abrir na aba Registros.</p>
+        </div></div>
+        <div id="tConjuntos"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- =========================================================== ABA: CAFÉ -->
+  <div class="aba-conteudo" data-aba="cafe" role="tabpanel" id="painel-cafe" aria-labelledby="aba-cafe" tabindex="0">
+    <section class="kpis" id="kpisCafe" aria-label="Indicadores da cafeicultura"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Benefici&aacute;rios por munic&iacute;pio</h2>
+          <p class="sub">Cafeicultores atendidos pelo programa. Clique para filtrar o munic&iacute;pio.</p>
+        </div></div>
+        <div id="gCafeMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico por sexo</h2>
+          <p class="sub">Onde o campo foi preenchido na planilha.</p>
+        </div></div>
+        <div id="gCafeSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Calc&aacute;rio por munic&iacute;pio</h2>
+          <p class="sub">Toneladas entregues aos cafeicultores.</p>
+        </div></div>
+        <div id="gCafeCalc" data-tipos="barras,colunas,tabela" data-unidade="t" data-dec="1"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Fertilizante por munic&iacute;pio</h2>
+          <p class="sub">NPK entregue, em quilos.</p>
+        </div></div>
+        <div id="gCafeNpk" data-tipos="barras,colunas,tabela" data-unidade="kg" data-dec="0"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Mudas por munic&iacute;pio</h2>
+          <p class="sub">Mudas de caf&eacute; distribu&iacute;das.</p>
+        </div></div>
+        <div id="gCafeMudas" data-tipos="barras,colunas,tabela" data-unidade="un" data-dec="0"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Forma&ccedil;&atilde;o e eventos do caf&eacute;</h2>
+          <p class="sub">Participantes por a&ccedil;&atilde;o: cursos, palestras e concurso de qualidade.</p>
+        </div></div>
+        <div id="gCafeAcoes" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por turma</h2>
+          <p class="sub">Turmas dos cursos de caf&eacute;, de produtores e de t&eacute;cnicos.</p>
+        </div></div>
+        <div id="gCafeTurmas" data-tipos="colunas,barras,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Institui&ccedil;&otilde;es dos t&eacute;cnicos do caf&eacute;</h2>
+          <p class="sub">De onde vieram os t&eacute;cnicos capacitados.</p>
+        </div></div>
+        <div id="gCafeInst" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Insumos entregues</h2>
+          <p class="sub">Total do programa no recorte atual.</p>
+        </div></div>
+        <div id="tCafeInsumos"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Cafeicultores atendidos</h2>
+          <p class="sub">Insumos recebidos por produtor.</p>
+        </div></div>
+        <div id="tCafeBenef"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ==================================================== ABA: ARMAZENAGEM -->
+  <div class="aba-conteudo" data-aba="armazenagem" role="tabpanel" id="painel-armazenagem" aria-labelledby="aba-armazenagem" tabindex="0">
+    <section class="kpis" id="kpisArmaz" aria-label="Indicadores da armazenagem"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Capacidade est&aacute;tica por munic&iacute;pio</h2>
+          <p class="sub">Toneladas de gr&atilde;o que cabem nas unidades de cada munic&iacute;pio.</p>
+        </div></div>
+        <div id="gSilosMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="t" data-dec="0"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Capacidade por natureza</h2>
+          <p class="sub">Quanto est&aacute; em unidades p&uacute;blicas, privadas e da Cageacre.</p>
+        </div></div>
+        <div id="gSilosTipo" data-tipos="rosca,pizza,barras,colunas,tabela" data-unidade="t" data-dec="0"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Unidades por natureza</h2>
+          <p class="sub">Quantidade de silos e armaz&eacute;ns, n&atilde;o a capacidade.</p>
+        </div></div>
+        <div id="gSilosQtd" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Investimento por munic&iacute;pio</h2>
+          <p class="sub">Constru&ccedil;&atilde;o e amplia&ccedil;&atilde;o das unidades p&uacute;blicas.</p>
+        </div></div>
+        <div id="gSilosInvest" data-tipos="barras,colunas,tabela" data-unidade="R$" data-dec="0"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Silos e armaz&eacute;ns cadastrados</h2>
+          <p class="sub">Capacidade est&aacute;tica, silo pulm&atilde;o e investimento por unidade.</p>
+        </div></div>
+        <div id="tSilos"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- =============================================== ABA: AQUICULTURA E PESCA -->
+  <div class="aba-conteudo" data-aba="aquicultura" role="tabpanel" id="painel-aquicultura" aria-labelledby="aba-aquicultura" tabindex="0">
+    <section class="kpis" id="kpisAqui" aria-label="Indicadores da aquicultura"></section>
+    <p class="nota">A divis&atilde;o registra o atendimento na planilha de atividade t&eacute;cnica. Aqui est&aacute; o
+      p&uacute;blico atendido; equipes, di&aacute;rias e quilometragem, comparados com as outras divis&otilde;es,
+      est&atilde;o na aba <b>Atividade t&eacute;cnica</b>.</p>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Produtores atendidos por munic&iacute;pio</h2>
+          <p class="sub">Visitas da equipe da DIAP. Clique para filtrar.</p>
+        </div></div>
+        <div id="gAquiMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico por sexo</h2>
+          <p class="sub">Produtores e produtoras atendidos.</p>
+        </div></div>
+        <div id="gAquiSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por m&ecirc;s</h2>
+          <p class="sub">Distribui&ccedil;&atilde;o das visitas ao longo do ano.</p>
+        </div></div>
+        <div id="gAquiMes" data-tipos="colunas,linha,area,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Faixa et&aacute;ria</h2>
+          <p class="sub">Idade dos produtores, onde foi registrada.</p>
+        </div></div>
+        <div id="gAquiFaixa" data-tipos="colunas,barras,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tipo de atividade</h2>
+          <p class="sub">Natureza do atendimento registrado.</p>
+        </div></div>
+        <div id="gAquiAtiv" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Produtores atendidos</h2>
+          <p class="sub">Registro das visitas da DIAP.</p>
+        </div></div>
+        <div id="tAqui"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================================ ABA: CENTRAL DE INCUBAÇÃO -->
+  <div class="aba-conteudo" data-aba="incubacao" role="tabpanel" id="painel-incubacao" aria-labelledby="aba-incubacao" tabindex="0">
+    <section class="kpis" id="kpisIncub" aria-label="Indicadores da central de incuba&ccedil;&atilde;o"></section>
+    <div class="painel-grid">
+
+      <section class="painel largo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Pintos distribu&iacute;dos por ano</h2>
+          <p class="sub">S&eacute;rie hist&oacute;rica da central. Clique num ano para filtrar.</p>
+        </div></div>
+        <div id="gIncubAno" data-tipos="colunas,linha,area,tabela" data-clique="ano" data-dec="0"></div>
+      </section>
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Pintos por munic&iacute;pio</h2>
+          <p class="sub">Total entregue em cada munic&iacute;pio. Clique para filtrar.</p>
+        </div></div>
+        <div id="gIncubMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-dec="0"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Corte e postura</h2>
+          <p class="sub">Finalidade dos lotes, quando informada no lan&ccedil;amento.</p>
+        </div></div>
+        <div id="gIncubTipo" data-tipos="rosca,pizza,barras,tabela" data-dec="0"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico por sexo</h2>
+          <p class="sub">Quem recebeu os lotes de pintos.</p>
+        </div></div>
+        <div id="gIncubSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Maiores benefici&aacute;rios</h2>
+          <p class="sub">Somando todas as entregas do recorte.</p>
+        </div></div>
+        <div id="gIncubBenef" data-tipos="barras,colunas,tabela" data-dec="0"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Projeto Galinha Caipira &mdash; unidades demonstrativas</h2>
+          <p class="sub">Produtoras acompanhadas pelo projeto.</p>
+        </div></div>
+        <div id="tGalinha"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ======================================================= ABA: CALCÁRIO -->
+  <div class="aba-conteudo" data-aba="calcario" role="tabpanel" id="painel-calcario" aria-labelledby="aba-calcario" tabindex="0">
+    <section class="kpis" id="kpisCalc" aria-label="Indicadores do calc&aacute;rio"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Calc&aacute;rio por munic&iacute;pio</h2>
+          <p class="sub">Toneladas entregues pelo programa. Clique para filtrar.</p>
+        </div></div>
+        <div id="gCalcMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="t" data-dec="1"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Benefici&aacute;rios por sexo</h2>
+          <p class="sub">Distribui&ccedil;&atilde;o do p&uacute;blico do programa.</p>
+        </div></div>
+        <div id="gCalcSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Benefici&aacute;rios por munic&iacute;pio</h2>
+          <p class="sub">Quantidade de produtores atendidos, n&atilde;o o volume.</p>
+        </div></div>
+        <div id="gCalcBenefMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Calc&aacute;rio j&aacute; distribu&iacute;do</h2>
+          <p class="sub">Se o produtor chegou a espalhar o calc&aacute;rio na &aacute;rea.</p>
+        </div></div>
+        <div id="gCalcDistrib" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Origem da indica&ccedil;&atilde;o</h2>
+          <p class="sub">Quem indicou o produtor ao programa.</p>
+        </div></div>
+        <div id="gCalcIndic" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Faixa et&aacute;ria</h2>
+          <p class="sub">Idade dos benefici&aacute;rios em 2023.</p>
+        </div></div>
+        <div id="gCalcFaixa" data-tipos="colunas,barras,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Maiores benefici&aacute;rios</h2>
+          <p class="sub">Produtores com mais calc&aacute;rio recebido no recorte.</p>
+        </div></div>
+        <div id="gCalcTop" data-tipos="barras,colunas,tabela" data-unidade="t" data-dec="1"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Calc&aacute;rio entregue &agrave;s unidades demonstrativas</h2>
+          <p class="sub">Entregas da Pecu&aacute;ria Eficiente, com data e situa&ccedil;&atilde;o da unidade.</p>
+        </div></div>
+        <div id="tCalcUnidades"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================================== ABA: PECUÁRIA EFICIENTE -->
+  <div class="aba-conteudo" data-aba="pecefic" role="tabpanel" id="painel-pecefic" aria-labelledby="aba-pecefic" tabindex="0">
+    <section class="kpis" id="kpisPecEf" aria-label="Indicadores da Pecu&aacute;ria Eficiente"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>&Aacute;rea recuperada por munic&iacute;pio</h2>
+          <p class="sub">Pastagem recuperada nas unidades do programa. Clique para filtrar.</p>
+        </div></div>
+        <div id="gUnidadesMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="ha" data-dec="1"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Unidades por tipo</h2>
+          <p class="sub">Demonstrativas (UD) e produtivas (UP).</p>
+        </div></div>
+        <div id="gUnidadesTipo" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Composi&ccedil;&atilde;o do adubo</h2>
+          <p class="sub">O que foi entregue &agrave;s unidades.</p>
+        </div></div>
+        <div id="gAdubos" data-tipos="rosca,pizza,barras,tabela" data-unidade="kg" data-dec="0"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Adubo por munic&iacute;pio</h2>
+          <p class="sub">Quilos entregues em cada munic&iacute;pio.</p>
+        </div></div>
+        <div id="gAdubosMun" data-tipos="barras,colunas,tabela" data-unidade="kg" data-dec="0"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Unidades do programa</h2>
+          <p class="sub">&Aacute;rea total, &aacute;rea recuperada e propor&ccedil;&atilde;o recuperada em cada unidade.</p>
+        </div></div>
+        <div id="tUnidades"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Adubos entregues por produtor</h2>
+          <p class="sub">Ureia, superfosfato, cloreto de pot&aacute;ssio e micronutrientes.</p>
+        </div></div>
+        <div id="tAdubos"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Energia solar</h2>
+          <p class="sub">Propriedades com sistema instalado.</p>
+        </div></div>
+        <div id="tSolar"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================================ ABA: MELHORAMENTO GENÉTICO -->
+  <div class="aba-conteudo" data-aba="genetica" role="tabpanel" id="painel-genetica" aria-labelledby="aba-genetica" tabindex="0">
+    <section class="kpis" id="kpisGen" aria-label="Indicadores do melhoramento gen&eacute;tico"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Da insemina&ccedil;&atilde;o ao bezerro</h2>
+          <p class="sub">Cada etapa do processo, em cabe&ccedil;as.</p>
+        </div></div>
+        <div id="gIAFunil" data-tipos="colunas,barras,tabela" data-unidade="un" data-dec="0"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Sexo dos bezerros</h2>
+          <p class="sub">Nascimentos j&aacute; registrados.</p>
+        </div></div>
+        <div id="gIASexoBezerro" data-tipos="rosca,pizza,barras,tabela" data-dec="0"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Vacas inseminadas por produtor</h2>
+          <p class="sub">Tamanho de cada lote acompanhado.</p>
+        </div></div>
+        <div id="gIATop" data-tipos="barras,colunas,tabela" data-unidade="un" data-dec="0"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Doses por touro</h2>
+          <p class="sub">Quanto de cada touro j&aacute; foi utilizado.</p>
+        </div></div>
+        <div id="gDosesTouro" data-tipos="barras,colunas,tabela" data-unidade="un" data-dec="0"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Insemina&ccedil;&atilde;o artificial por produtor</h2>
+          <p class="sub">Vacas, prenhezes confirmadas e bezerros nascidos.</p>
+        </div></div>
+        <div id="tIA"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Banco de s&ecirc;men</h2>
+          <p class="sub">Doses por touro: recebidas, utilizadas e dispon&iacute;veis.</p>
+        </div></div>
+        <div id="tTouros"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Ensimina &mdash; produtores atendidos</h2>
+          <p class="sub">Doses entregues pelo programa de insemina&ccedil;&atilde;o em massa.</p>
+        </div></div>
+        <div id="tEnsimina"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================================= ABA: USINA DE NITROGÊNIO -->
+  <div class="aba-conteudo" data-aba="usina" role="tabpanel" id="painel-usina" aria-labelledby="aba-usina" tabindex="0">
+    <section class="kpis" id="kpisUsina" aria-label="Indicadores da usina de nitrog&ecirc;nio"></section>
+    <div class="painel-grid">
+
+      <section class="painel largo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Fornecimento por ano</h2>
+          <p class="sub">Litros fornecidos, com o valor arrecadado no mesmo per&iacute;odo. Clique num ano para filtrar.</p>
+        </div></div>
+        <div id="gNitroAno" data-tipos="colunas,linha,area,tabela" data-clique="ano" data-dec="1"></div>
+      </section>
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Litros por munic&iacute;pio</h2>
+          <p class="sub">Onde est&atilde;o os produtores atendidos. Clique para filtrar.</p>
+        </div></div>
+        <div id="gNitroMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun" data-unidade="L" data-dec="0"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Sazonalidade</h2>
+          <p class="sub">Retiradas por m&ecirc;s, somando todos os anos.</p>
+        </div></div>
+        <div id="gNitroMes" data-tipos="colunas,linha,area,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Maiores clientes</h2>
+          <p class="sub">Litros retirados por produtor ou empresa.</p>
+        </div></div>
+        <div id="gNitroClientes" data-tipos="barras,colunas,tabela" data-unidade="L" data-dec="0"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Arrecada&ccedil;&atilde;o por munic&iacute;pio</h2>
+          <p class="sub">Valor recolhido pelo fornecimento.</p>
+        </div></div>
+        <div id="gNitroValorMun" data-tipos="barras,colunas,tabela" data-unidade="R$" data-dec="0"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Clientes da usina</h2>
+          <p class="sub">Retiradas, litros e valor por cliente no recorte atual.</p>
+        </div></div>
+        <div id="tNitroClientes"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================================== ABA: ATIVIDADE TÉCNICA -->
+  <div class="aba-conteudo" data-aba="atividade" role="tabpanel" id="painel-atividade" aria-labelledby="aba-atividade" tabindex="0">
+    <section class="kpis" id="kpisAtiv" aria-label="Indicadores da atividade t&eacute;cnica"></section>
+    <p class="nota">Tr&ecirc;s divis&otilde;es preenchem a mesma planilha de atividade t&eacute;cnica &mdash; pecu&aacute;ria,
+      aquicultura e central de incuba&ccedil;&atilde;o. Aqui elas aparecem juntas, para comparar equipes,
+      di&aacute;rias e quilometragem no departamento inteiro.</p>
+    <div class="painel-grid">
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por divis&atilde;o</h2>
+          <p class="sub">Quem est&aacute; em campo, e quanto.</p>
+        </div></div>
+        <div id="gAtivDiv" data-tipos="rosca,pizza,barras,colunas,tabela"></div>
+      </section>
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por munic&iacute;pio</h2>
+          <p class="sub">Produtores visitados em cada munic&iacute;pio. Clique para filtrar.</p>
+        </div></div>
+        <div id="gAtivMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Atendimentos por ano</h2>
+          <p class="sub">Visitas registradas, com a quilometragem do mesmo per&iacute;odo. Clique num ano para filtrar.</p>
+        </div></div>
+        <div id="gAtivAno" data-tipos="colunas,linha,area,tabela" data-clique="ano"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Equipe t&eacute;cnica em campo</h2>
+          <p class="sub">Quantas visitas cada t&eacute;cnico acompanhou.</p>
+        </div></div>
+        <div id="gAtivEquipe" data-tipos="barras,colunas,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico por sexo</h2>
+          <p class="sub">Produtores e produtoras visitados.</p>
+        </div></div>
+        <div id="gAtivSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Quilometragem por munic&iacute;pio</h2>
+          <p class="sub">Dist&acirc;ncia percorrida para atender cada munic&iacute;pio.</p>
+        </div></div>
+        <div id="gAtivKmMun" data-tipos="barras,colunas,tabela" data-unidade="km" data-dec="0"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Tipo de atividade</h2>
+          <p class="sub">Natureza do atendimento registrado.</p>
+        </div></div>
+        <div id="gAtivTipo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Visitas registradas</h2>
+          <p class="sub">Atividade t&eacute;cnica das tr&ecirc;s divis&otilde;es, linha a linha.</p>
+        </div></div>
+        <div id="tAtiv"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ========================================================= ABA: CURSOS -->
+  <div class="aba-conteudo" data-aba="cursos" role="tabpanel" id="painel-cursos" aria-labelledby="aba-cursos" tabindex="0">
+    <section class="kpis" id="kpisCursos" aria-label="Indicadores dos cursos"></section>
+    <p class="nota">Os cursos do caf&eacute; t&ecirc;m planilha pr&oacute;pria e est&atilde;o na aba <b>Caf&eacute;</b>,
+      junto com o resto do programa.</p>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por curso</h2>
+          <p class="sub">Somando as turmas de produtores e de t&eacute;cnicos.</p>
+        </div></div>
+        <div id="gCursos" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico</h2>
+          <p class="sub">Produtores e t&eacute;cnicos capacitados.</p>
+        </div></div>
+        <div id="gCursoPublico" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Institui&ccedil;&otilde;es dos t&eacute;cnicos</h2>
+          <p class="sub">De onde vieram os t&eacute;cnicos capacitados.</p>
+        </div></div>
+        <div id="gCursoInst" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por munic&iacute;pio</h2>
+          <p class="sub">Onde o p&uacute;blico dos cursos est&aacute;.</p>
+        </div></div>
+        <div id="gCursoMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por ano</h2>
+          <p class="sub">Cursos com data registrada. Clique num ano para filtrar.</p>
+        </div></div>
+        <div id="gCursoAno" data-tipos="colunas,linha,area,tabela" data-clique="ano"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Cursos realizados</h2>
+          <p class="sub">Uma linha por turma, com per&iacute;odo, local e n&uacute;mero de participantes.</p>
+        </div></div>
+        <div id="tCursos"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ======================================================== ABA: EVENTOS -->
+  <div class="aba-conteudo" data-aba="eventos" role="tabpanel" id="painel-eventos" aria-labelledby="aba-eventos" tabindex="0">
+    <section class="kpis" id="kpisEventos" aria-label="Indicadores dos eventos"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por tipo de evento</h2>
+          <p class="sub">Palestras, dias de campo e semin&aacute;rios.</p>
+        </div></div>
+        <div id="gEventoTipo" data-tipos="barras,colunas,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por munic&iacute;pio</h2>
+          <p class="sub">Onde os eventos alcan&ccedil;aram p&uacute;blico. Clique para filtrar.</p>
+        </div></div>
+        <div id="gEventoMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes por ano</h2>
+          <p class="sub">Eventos com data registrada. Clique num ano para filtrar.</p>
+        </div></div>
+        <div id="gEventoAno" data-tipos="colunas,linha,area,tabela" data-clique="ano"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Palestrantes do Expoacre</h2>
+          <p class="sub">Temas apresentados nas edi&ccedil;&otilde;es de 2023 e 2024.</p>
+        </div></div>
+        <div id="tExpoacre"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Eventos realizados</h2>
+          <p class="sub">Local, ano e p&uacute;blico de cada evento.</p>
+        </div></div>
+        <div id="tEventos"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Participantes</h2>
+          <p class="sub">Quem esteve em palestras, semin&aacute;rios e dias de campo.</p>
+        </div></div>
+        <div id="tEventoPessoas"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ====================================================== ABA: MUNICÍPIOS -->
+  <div class="aba-conteudo" data-aba="municipio" role="tabpanel" id="painel-municipio" aria-labelledby="aba-municipio" tabindex="0">
+    <section class="kpis" id="kpisMunicipio" aria-label="Indicadores por munic&iacute;pio"></section>
+    <div class="painel-grid">
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Registros por munic&iacute;pio</h2>
+          <p class="sub">Somando todos os programas. Clique para filtrar o munic&iacute;pio.</p>
+        </div></div>
+        <div id="gMunRegistros" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Registros por regional</h2>
+          <p class="sub">Regionais de desenvolvimento do Acre. Clique para filtrar.</p>
+        </div></div>
+        <div id="gMunRegional" data-tipos="rosca,pizza,barras,colunas,tabela" data-clique="reg"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Pessoas atendidas por munic&iacute;pio</h2>
+          <p class="sub">Nomes distintos, sem contar o mesmo produtor duas vezes.</p>
+        </div></div>
+        <div id="gMunPessoas" data-tipos="barras,colunas,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Programas por munic&iacute;pio</h2>
+          <p class="sub">Em quantos programas do DEAGRO cada munic&iacute;pio aparece.</p>
+        </div></div>
+        <div id="gMunProgramas" data-tipos="barras,colunas,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>O que cada munic&iacute;pio recebeu</h2>
+          <p class="sub">Entregas de todos os programas lado a lado. Clique numa linha para filtrar o munic&iacute;pio.</p>
+        </div></div>
+        <div id="tMunicipios"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- =================================================== ABA: BENEFICIÁRIOS -->
+  <div class="aba-conteudo" data-aba="beneficiario" role="tabpanel" id="painel-beneficiario" aria-labelledby="aba-beneficiario" tabindex="0">
+    <section class="kpis" id="kpisBenef" aria-label="Indicadores por benefici&aacute;rio"></section>
+    <p class="nota">As pessoas s&atilde;o reunidas pelo nome grafado na planilha, sem acento e sem
+      diferen&ccedil;a de mai&uacute;sculas. Grafias diferentes do mesmo produtor contam separado.
+      Use a busca <b>Produtor ou t&eacute;cnico</b>, na barra de filtros, para achar algu&eacute;m.</p>
+    <div class="painel-grid">
+
+      <section class="painel destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Em quantos programas</h2>
+          <p class="sub">Quantas pessoas o departamento atende em mais de uma frente.</p>
+        </div></div>
+        <div id="gBenefProgramas" data-tipos="colunas,barras,rosca,pizza,tabela"></div>
+      </section>
+
+      <section class="painel duplo destaque">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Quem mais aparece</h2>
+          <p class="sub">Pessoas com mais registros somando todos os programas.</p>
+        </div></div>
+        <div id="gBenefTop" data-tipos="barras,colunas,tabela"></div>
+      </section>
+
+      <section class="painel duplo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Pessoas por munic&iacute;pio</h2>
+          <p class="sub">Onde est&atilde;o os benefici&aacute;rios. Clique para filtrar.</p>
+        </div></div>
+        <div id="gBenefMun" data-tipos="barras,colunas,rosca,pizza,tabela" data-clique="mun"></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>P&uacute;blico por sexo</h2>
+          <p class="sub">Pessoas distintas, n&atilde;o registros.</p>
+        </div></div>
+        <div id="gBenefSexo" data-tipos="rosca,pizza,barras,tabela"></div>
+      </section>
+
+      <section class="painel largo">
+        <div class="painel-cab"><div class="painel-cab-tit">
+          <h2>Ficha por pessoa</h2>
+          <p class="sub">Em que programas cada pessoa aparece e o que recebeu.</p>
+        </div></div>
+        <div id="tBeneficiarios"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ====================================================== ABA: REGISTROS -->
+  <div class="aba-conteudo" data-aba="registros" role="tabpanel" id="painel-registros" aria-labelledby="aba-registros" tabindex="0">
+    <section class="painel largo">
+      <div class="painel-cab">
+        <div class="painel-cab-tit">
+          <h2>Registros</h2>
+          <p class="sub">Cada base da planilha, linha a linha, j&aacute; com os filtros aplicados.</p>
+        </div>
+        <div class="painel-acoes">
+          <label class="sel-rot" for="selConjunto">Base</label>
+          <select id="selConjunto" class="sel-conjunto"></select>
+        </div>
+      </div>
+      <p class="nota" id="notaConjunto" hidden></p>
+      <div id="tRegistros"></div>
+      <div class="paginacao" id="paginacao"></div>
+    </section>
+  </div>
+
+  </div>
+</div>
+
+<footer>
+  Secretaria de Estado de Agricultura &ndash; SEAGRI / Acre &middot;
+  Departamento de Agroneg&oacute;cio &middot; <span id="rodapeFonte"></span>
+</footer>
+
+<script src="../js/graficos.js?v=2026081302"></script>
+<script src="../js/dados-deagro.js?v=2026081302"></script>
+<script src="../js/deagro.js?v=2026081302"></script>
+</body>
+</html>

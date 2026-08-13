@@ -1,0 +1,23 @@
+/* Página-índice dos painéis — SEAGRI
+   Herda de index.css: só ajusta o que muda entre a home (cinco atalhos curtos)
+   e esta página (dois cartões descritivos, com texto de apoio). */
+
+.voltar-btn{position:absolute;top:12px;left:16px;display:inline-flex;align-items:center;gap:6px;
+  padding:7px 12px;background:rgba(255,255,255,.15);color:#fff;text-decoration:none;
+  border:1px solid rgba(255,255,255,.35);border-radius:8px;font-size:12px;font-weight:600;
+  transition:background .2s}
+.voltar-btn:hover{background:rgba(255,255,255,.28)}
+
+/* dois cartões largos, lado a lado e com a mesma altura */
+.cards-paineis{grid-template-columns:repeat(2,minmax(0,360px));max-width:760px}
+.cards-paineis .card{display:flex;flex-direction:column;padding:32px 28px}
+.cards-paineis .card p{flex:1;text-align:left}
+.cards-paineis .card .badge{align-self:center}
+
+@media(max-width:768px){
+  /* o hambúrguer do menu ocupa o canto esquerdo do cabeçalho no celular */
+  .voltar-btn{left:auto;right:12px;top:50%;transform:translateY(-50%);font-size:11px;padding:6px 10px}
+  .cards-paineis{grid-template-columns:1fr;max-width:100%}
+  .cards-paineis .card{padding:22px 18px}
+  .cards-paineis .card p{text-align:center}
+}

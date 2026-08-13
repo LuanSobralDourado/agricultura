@@ -1,0 +1,62 @@
+/* Painel do DEAGRO — SEAGRI
+   Complementa css/dashboard.css: só o que este painel tem a mais (campo de
+   busca por nome, seletor de base, paginação e notas de rodapé de tabela).
+   Tudo o mais — tokens, tema escuro, abas, KPIs, painéis, gráficos, tabelas —
+   vem de dashboard.css, para os dois painéis continuarem idênticos ao olho. */
+
+/* o botão de voltar aos painéis é um link com a aparência dos botões do topo */
+.header-acoes a.tema-btn{text-decoration:none}
+
+/* ------------------------------------------------------------------- abas
+   São quinze, uma por programa. `flex:1 0 auto` faz cada aba crescer para
+   preencher a barra inteira em tela larga, e `0` de encolhimento garante que
+   em tela estreita elas mantenham o tamanho do texto e a pista role — em vez
+   de espremer quinze rótulos ilegíveis lado a lado. */
+.abas-pista{justify-content:flex-start}
+.aba{flex:1 0 auto;min-width:0;padding-left:10px;padding-right:10px;text-align:center}
+
+/* O gráfico cresce para ocupar o painel, mas nunca encolhe abaixo do próprio
+   conteúdo: comprimido, o fim da lista de barras vazava por baixo da borda e
+   ficava escondido atrás do painel seguinte. */
+.painel > [data-tipos]{flex-shrink:0}
+
+/* ------------------------------------------------------- filtro por nome */
+.campo-busca{width:100%;padding:8px 10px;border:1px solid var(--linha-t);border-radius:8px;
+  background:var(--superficie);color:var(--tinta);font-family:inherit;font-size:13px;
+  outline:none;transition:border-color .15s}
+.campo-busca::placeholder{color:var(--tinta3)}
+.campo-busca:focus{border-color:var(--verde2)}
+.filtro-nota{font-size:10.5px;line-height:1.45;color:var(--tinta3);flex:none;width:100%;
+  margin-top:2px;border-top:1px solid var(--linha-t);padding-top:8px}
+
+/* -------------------------------------------------- seletor de base (Registros) */
+.sel-rot{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--tinta3)}
+.sel-conjunto{max-width:320px;padding:7px 10px;border:1px solid var(--linha-t);border-radius:8px;
+  background:var(--superficie2);color:var(--tinta);font-family:inherit;font-size:12.5px;
+  cursor:pointer}
+.sel-conjunto:focus-visible{outline:2px solid var(--verde2);outline-offset:1px}
+
+/* ------------------------------------------------------------- paginação */
+.paginacao{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;
+  min-height:20px}
+.paginacao .btn:disabled{opacity:.45;cursor:default}
+.pag-info{font-size:12px;color:var(--tinta2);font-variant-numeric:tabular-nums}
+
+/* -------------------------------------------------------- notas de tabela */
+.tabela-nota{font-size:11.5px;color:var(--tinta3);line-height:1.5;margin-top:9px}
+
+/* linha de tabela que leva a outra aba (índice das bases, na visão geral) */
+table.dados tr.lin-clique{cursor:pointer}
+table.dados tr.lin-clique:hover{background:var(--acento-suave)}
+table.dados tr.lin-clique:hover td.forte{color:var(--acento)}
+table.dados tr.lin-clique:focus-visible{outline:2px solid var(--acento);outline-offset:-2px}
+table.dados th.num-cab{text-align:right}
+
+/* a aba Registros é uma tabela larga sozinha: sem grade de painéis */
+.aba-conteudo[data-aba="registros"] .painel{margin:0}
+
+@media(max-width:768px){
+  .painel-acoes .sel-rot{display:none}
+  .sel-conjunto{max-width:100%;flex:1}
+}

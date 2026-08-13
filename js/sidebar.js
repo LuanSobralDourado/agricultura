@@ -81,10 +81,13 @@
     }
   });
 
-  // Mark active link
+  // Mark active link. Um item pode cobrir mais de uma página: "Dashboards"
+  // aponta para o índice dos painéis, mas continua aceso dentro de cada painel.
+  // As páginas cobertas vão em data-paginas, separadas por espaço.
   var p = location.pathname.split('/').pop().replace('.html','');
   if(!p || p === '') p = 'index';
-  var a = document.querySelector('.sidebar-link[data-page="'+p+'"]');
+  var a = document.querySelector('.sidebar-link[data-page="'+p+'"]') ||
+          document.querySelector('.sidebar-link[data-paginas~="'+p+'"]');
   if(a) a.classList.add('ativo');
 
   // Admin visibility — Chamados e Contatos só aparecem com senha
