@@ -57,11 +57,6 @@ html[data-tema="escuro"]{color-scheme:dark}
 body{min-height:100vh;display:flex;flex-direction:column;background:var(--plano);color:var(--tinta)}
 
 /* --------------------------------- ajustes do chrome compartilhado (base.css) */
-html[data-tema="escuro"] .sidebar{background:var(--superficie);box-shadow:4px 0 28px rgba(0,0,0,.5)}
-html[data-tema="escuro"] .sidebar-link{color:var(--tinta2)}
-html[data-tema="escuro"] .sidebar-link:hover{background:var(--superficie2);color:var(--acento)}
-html[data-tema="escuro"] .sidebar-link.ativo{background:var(--acento-suave);color:var(--acento);border-left-color:var(--acento)}
-html[data-tema="escuro"] .sidebar-foot{color:var(--tinta3);border-top-color:var(--linha-t)}
 
 header{position:relative;background:linear-gradient(135deg,var(--verde),var(--verde2));color:#fff;
   padding:18px 64px;text-align:center;box-shadow:0 4px 12px rgba(27,94,32,.2);
@@ -79,6 +74,17 @@ header p{font-size:12px;opacity:.9;margin:0}
 .tema-btn svg{width:15px;height:15px}
 
 /* ------------------------------------------------------------ menu de abas */
+/* Usada só pelo painel do DEAGRO, onde cada quadrado é uma aba e a barra só
+   repetiria a escolha já feita. A barra continua no DOM — o painel usa os
+   botões para trocar de aba, marcar a ativa e validar a URL —, apenas sai da
+   vista. A mecanização mantém a barra: lá o quadrado escolhe o ANO, e as abas
+   são o outro eixo (incluindo as de admin, que não têm quadrado). */
+/* O nome carrega "deagro" de propósito: uma versão antiga do dashboard.js
+   marcava o <body> com "sem-abas" para esconder as abas, e sob file:// o ?v=
+   não renova o cache — aquele script pode seguir em uso por tempo indefinido.
+   Com o gancho renomeado, ele marca uma classe que ninguém mais escuta e as
+   abas da mecanização aparecem de qualquer jeito. */
+body.deagro-sem-abas .abas{display:none}
 .abas{background:var(--superficie);border-bottom:1px solid var(--linha-t);
   box-shadow:0 2px 6px rgba(0,0,0,.06);position:sticky;top:0;z-index:900}
 .abas-pista{display:flex;justify-content:center;gap:2px;padding:0 12px;

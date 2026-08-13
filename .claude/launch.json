@@ -4,14 +4,25 @@
     {
       "name": "organograma",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8734"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8734",
+        "--directory",
+        "C:/xampp/htdocs/agricultura"
+      ],
       "port": 8734
     },
     {
       "name": "organograma-principal",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8736", "--directory",
-                      "C:/xampp/htdocs/organograma/organograma"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8736",
+        "--directory",
+        "C:/xampp/htdocs/organograma/organograma"
+      ],
       "port": 8736
     }
   ]

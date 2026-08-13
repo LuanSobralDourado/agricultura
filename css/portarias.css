@@ -1,5 +1,6 @@
 /* Estilos da página Portarias — SEAGRI */
 header {
+  position: relative;
   background: linear-gradient(135deg, var(--verde), var(--verde2));
   color: #fff;
   padding: 20px 32px;

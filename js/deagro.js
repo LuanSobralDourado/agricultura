@@ -366,6 +366,7 @@
     CACHE = {};
     pag = 1;
     montarFiltros();
+    gravarUrl(false);
     atualizar();
   }
 
@@ -1518,6 +1519,74 @@
     el('painel-registros').scrollIntoView({ block: 'start' });
   });
 
+  /* ------------------------------------------------------------------- URL */
+  /* Mesmo endereçamento do painel da mecanização: #aba?ano=…&reg=…&mun=…&nome=…
+     Sem isso o link compartilhado abre a aba certa com os filtros zerados, e
+     recarregar a página perde a seleção. */
+  var CAMPOS_URL = ['ano', 'reg', 'mun', 'nome'];
+
+  function estadoParaHash() {
+    var p = [];
+    CAMPOS_URL.forEach(function (k) {
+      var v = k === 'nome' ? F.nome : F[k].join(',');
+      if (v) p.push(k + '=' + encodeURIComponent(v));
+    });
+    return '#' + ABA + (p.length ? '?' + p.join('&') : '');
+  }
+
+  function gravarUrl(novaEntrada) {
+    var h = estadoParaHash();
+    if (location.hash === h) return;
+    try {
+      if (novaEntrada) history.pushState(null, '', h);
+      else history.replaceState(null, '', h);
+    } catch (e) { location.hash = h; }   // file:// sem permissão
+  }
+
+  function lerHash() {
+    var bruto = location.hash.slice(1);
+    var i = bruto.indexOf('?');
+    var filtros = {};
+    (i < 0 ? '' : bruto.slice(i + 1)).split('&').forEach(function (par) {
+      var j = par.indexOf('=');
+      if (j < 0) return;
+      var k = par.slice(0, j);
+      if (CAMPOS_URL.indexOf(k) >= 0) filtros[k] = decodeURIComponent(par.slice(j + 1));
+    });
+    return { aba: (i < 0 ? bruto : bruto.slice(0, i)) || '', filtros: filtros };
+  }
+
+  function listaDaUrl(v) {
+    return String(v || '').split(',').map(function (s) { return s.trim(); })
+      .filter(function (s) { return s; });
+  }
+
+  /** Aplica um estado vindo da URL: carga inicial ou botão Voltar. Valores que
+      não existem na base são descartados — um link antigo ou editado à mão
+      abriria o painel com um filtro impossível e nenhum registro. */
+  function aplicarEstado(est) {
+    var reg = listaDaUrl(est.filtros.reg).filter(function (r) {
+      return REGIONAIS.some(function (x) { return x.nome === r; });
+    });
+    var mun = listaDaUrl(est.filtros.mun).filter(function (m) {
+      // o município precisa existir E pertencer à regional marcada, senão o
+      // par regional+município se anula e o recorte fica vazio
+      return D.municipios.indexOf(m) >= 0 &&
+        (!reg.length || reg.indexOf(regionalDe(m)) >= 0);
+    });
+    F = {
+      ano: listaDaUrl(est.filtros.ano).filter(function (a) { return D.anos.indexOf(a) >= 0; }),
+      mun: mun,
+      reg: reg,
+      nome: (est.filtros.nome || '').trim()
+    };
+    el('buscaNome').value = F.nome;
+    CACHE = {};
+    pag = 1;
+    montarFiltros();
+    abrirAba(DESENHO[est.aba] ? est.aba : 'geral', { semUrl: true });
+  }
+
   /* ---------------------------------------------------------------- abas */
   var ABA = 'geral';
   var DESENHO = {
@@ -1528,8 +1597,9 @@
     municipio: verMunicipio, beneficiario: verBeneficiario, registros: verRegistros
   };
 
-  function abrirAba(nome) {
+  function abrirAba(nome, opc) {
     if (!DESENHO[nome]) return;
+    opc = opc || {};
     ABA = nome;
     document.querySelectorAll('.aba').forEach(function (b) {
       var on = b.getAttribute('data-aba') === nome;
@@ -1540,7 +1610,10 @@
     document.querySelectorAll('.aba-conteudo').forEach(function (d) {
       d.classList.toggle('ativa', d.getAttribute('data-aba') === nome);
     });
-    try { location.hash = nome; } catch (e) { /* file:// sem permissão */ }
+    // trocar de aba é navegação: entra no histórico. Mudança de filtro só
+    // reescreve o endereço (gravarUrl(false)), senão o Voltar viraria um
+    // desfazer de clique em clique
+    if (!opc.semUrl) gravarUrl(true);
     // a aba escolhida pode estar fora da parte visível da pista de abas
     var botao = document.querySelector('.aba[data-aba="' + nome + '"]');
     if (botao && botao.scrollIntoView) {
@@ -1596,6 +1669,9 @@
     'aparecem inteiras. ' + fonte;
   el('rodapeFonte').textContent = fonte;
 
-  var inicial = (location.hash || '').replace('#', '');
-  abrirAba(DESENHO[inicial] ? inicial : 'geral');
+  // Voltar/Avançar percorrem as seleções, não só as abas
+  window.addEventListener('popstate', function () { aplicarEstado(lerHash()); });
+
+  aplicarEstado(lerHash());
+  gravarUrl(false);   // deixa a URL refletir a seleção já no primeiro desenho
 })();

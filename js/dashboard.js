@@ -2981,12 +2981,28 @@
   }
 
   function gravarUrl(novaEntrada) {
+    atualizarVoltar();
     var h = estadoParaHash();
     if (location.hash === h) return;
     try {
       if (novaEntrada) history.pushState(null, '', h);
       else history.replaceState(null, '', h);
     } catch (e) { location.hash = h; }   // file:// em navegador antigo
+  }
+
+  /** O "voltar" leva às seções DO EXERCÍCIO ABERTO, não a uma lista solta:
+      quem trocou de ano dentro do painel espera voltar para o ano que está
+      vendo. Vários anos marcados não cabem numa página só de seções, então aí
+      o caminho é a escolha de exercício. */
+  function atualizarVoltar() {
+    var a = el('voltarSecoes');
+    if (!a) return;
+    if (F.ano.length > 1) {
+      a.href = 'mecanizacao.html';
+      return;
+    }
+    a.href = 'mecanizacao-secoes.html?ano=' +
+      encodeURIComponent(F.ano.length ? F.ano[0] : CONSOLIDADO);
   }
 
   function lerHash() {
@@ -3126,7 +3142,6 @@
     // saiu do admin estando numa aba restrita: volta para a visão geral
     var ativa = document.querySelector('.aba.ativa');
     if (!on && ativa && ativa.classList.contains('aba-admin')) abrirAba('geral');
-    if (window._sidebarRefreshAdmin) window._sidebarRefreshAdmin();
   }
   function abrirModal() {
     el('admSenha').value = '';

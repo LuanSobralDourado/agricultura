@@ -1,6 +1,6 @@
 /* Estilos da página Chamados — SEAGRI */
 :root{--azul:#0b5394;}
-header{background:linear-gradient(135deg,var(--verde),var(--verde2));color:#fff;padding:20px 32px;text-align:center;box-shadow:0 4px 12px rgba(27,94,32,0.2);}
+header{position:relative;background:linear-gradient(135deg,var(--verde),var(--verde2));color:#fff;padding:20px 32px;text-align:center;box-shadow:0 4px 12px rgba(27,94,32,0.2);}
 header h1{margin:0 0 4px;font-size:22px;font-weight:500;}
 header p{margin:0;font-size:12px;opacity:.9;}
 .wrap{padding:32px;max-width:100%;margin:0;}

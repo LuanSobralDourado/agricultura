@@ -2,11 +2,7 @@
    Herda de index.css: só ajusta o que muda entre a home (cinco atalhos curtos)
    e esta página (dois cartões descritivos, com texto de apoio). */
 
-.voltar-btn{position:absolute;top:12px;left:16px;display:inline-flex;align-items:center;gap:6px;
-  padding:7px 12px;background:rgba(255,255,255,.15);color:#fff;text-decoration:none;
-  border:1px solid rgba(255,255,255,.35);border-radius:8px;font-size:12px;font-weight:600;
-  transition:background .2s}
-.voltar-btn:hover{background:rgba(255,255,255,.28)}
+/* o .voltar-btn mora no base.css — toda página usa o mesmo */
 
 /* dois cartões largos, lado a lado e com a mesma altura */
 .cards-paineis{grid-template-columns:repeat(2,minmax(0,360px));max-width:760px}
@@ -15,9 +11,58 @@
 .cards-paineis .card .badge{align-self:center}
 
 @media(max-width:768px){
-  /* o hambúrguer do menu ocupa o canto esquerdo do cabeçalho no celular */
-  .voltar-btn{left:auto;right:12px;top:50%;transform:translateY(-50%);font-size:11px;padding:6px 10px}
   .cards-paineis{grid-template-columns:1fr;max-width:100%}
   .cards-paineis .card{padding:22px 18px}
   .cards-paineis .card p{text-align:center}
+}
+
+/* ------------------------------------------------ grade de 5 por linha
+   Os atalhos por ano (mecanização) e por seção (DEAGRO). São muitos e curtos,
+   então viram quadrados compactos em vez dos cartões descritivos acima. */
+.cards-grade{grid-template-columns:repeat(5,minmax(0,1fr));max-width:1080px;gap:16px}
+.cards-grade .card{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  aspect-ratio:1;padding:16px 12px;gap:2px}
+.cards-grade .card h2{font-size:17px;margin:0;line-height:1.2}
+.cards-grade .card p{font-size:12px;color:#888;margin:0}
+.cards-grade .card-icon{font-size:32px;margin:0 0 6px}
+/* ícone em SVG (abas do DEAGRO) no lugar do emoji */
+.cards-grade .card-svg{width:34px;height:34px;margin-bottom:8px;color:var(--verde);
+  stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cards-grade .card:hover .card-svg{color:var(--verde2)}
+/* o atalho que abre tudo junto se destaca dos anos individuais */
+.cards-grade .card-destaque{background:linear-gradient(135deg,var(--verde),var(--verde2));border-color:transparent}
+.cards-grade .card-destaque h2,.cards-grade .card-destaque p{color:#fff}
+.cards-grade .card-destaque p{opacity:.85}
+.cards-grade .card-destaque .card-svg{color:#fff}
+
+.grade-aviso{text-align:center;color:#888;font-size:13px;padding:24px 0}
+
+@media(max-width:980px){
+  .cards-grade{grid-template-columns:repeat(3,minmax(0,1fr));max-width:560px}
+}
+@media(max-width:560px){
+  .cards-grade{grid-template-columns:repeat(2,minmax(0,1fr));max-width:100%;gap:12px}
+  .cards-grade .card h2{font-size:15px}
+  .cards-grade .card-icon{font-size:26px}
+}
+
+/* ------------------------------ variante larga: 7 por linha, ocupando tudo
+   Só as seções do DEAGRO usam: são 15 quadrados, e presos ao teto de 1080px
+   sobrava faixa vazia dos dois lados. Aqui a grade acompanha a janela.
+   Vem depois das media queries acima de propósito — mesma especificidade,
+   então quem estiver por último é que vale. */
+.cards-grade-larga{grid-template-columns:repeat(7,minmax(0,1fr));max-width:none}
+/* o rótulo encolhe junto: em 7 colunas "Melhoramento genético" não cabe no
+   corpo de 17px sem estourar o quadrado */
+.cards-grade-larga .card h2{font-size:15px}
+.cards-grade-larga .card p{font-size:11px}
+
+@media(max-width:1200px){
+  .cards-grade-larga{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+@media(max-width:980px){
+  .cards-grade-larga{grid-template-columns:repeat(4,minmax(0,1fr));max-width:none}
+}
+@media(max-width:560px){
+  .cards-grade-larga{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
