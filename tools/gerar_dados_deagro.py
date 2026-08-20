@@ -313,13 +313,18 @@ conjunto("palestras_deagro", "Palestras do DEAGRO", "agricultura", "Eventos",
 # ============================================== 2. AQUICULTURA E PESCA (DIAP)
 def atividade(nome_aba, ci):
     """Abas de atividade tecnica. `ci` mapeia o nome das colunas, que mudam de
-    posicao entre as tres versoes da mesma planilha."""
+    posicao entre as tres versoes da mesma planilha.
+
+    "ender" e "geo" so existem em parte das versoes — quem nao tem simplesmente
+    omite a chave no mapa."""
     out = []
     for r in linhas(nome_aba):
         out.append(limpar({
             "data": data_iso(r[ci["data"]]), "ano": ano_de(r[ci["data"]]),
             "nome": texto(r[ci["nome"]]), "sexo": sexo(r[ci["sexo"]]),
             "idade": numero(r[ci["idade"]]), "mun": municipio(r[ci["mun"]]),
+            "ender": texto(r[ci["ender"]]) if "ender" in ci else "",
+            "geo": texto(r[ci["geo"]]).replace("\n", " ") if "geo" in ci else "",
             "ativ": texto(r[ci["ativ"]]),
             # a equipe vem com um nome por linha na mesma celula; o corte tem de
             # ser feito no valor cru, antes de texto() colapsar as quebras
@@ -338,6 +343,7 @@ MED_ATIV = [{"campo": "km", "rot": "Km percorridos", "un": "km", "dec": 0},
 conjunto("diap", "Atividade técnica — DIAP 2023", "aquicultura", "Atividade técnica",
          atividade("Atividade Técnica DIAP 2023",
                    {"data": 0, "nome": 1, "sexo": 2, "idade": 3, "mun": 6,
+                    "ender": 7, "geo": 8,
                     "ativ": 9, "equipe": 10, "diarias": 11, "dias": 12, "km": 13}),
          MED_ATIV,
          "Diárias, dias e quilometragem são lançados na primeira linha de cada "
@@ -349,6 +355,7 @@ incub = []
 for r in linhas("Controle de Beneficiários - Cen"):
     incub.append(limpar({
         "data": data_iso(r[0]), "ano": ano_de(r[0]), "nome": texto(r[1]),
+        "idade": numero(r[2]),
         "ender": texto(r[5]), "mun": municipio(r[6]),
         "corte": numero(r[7]), "postura": numero(r[8]),
         "total": numero(r[9]), "sexo": sexo(r[10]),
@@ -372,6 +379,7 @@ conjunto("incub_ativ", "Atividade técnica — Central de Incubação", "incubac
          "Atividade técnica",
          atividade("Atividade Técnica Central de In",
                    {"data": 0, "nome": 1, "sexo": 2, "idade": 3, "mun": 5,
+                    "geo": 6,
                     "ativ": 7, "equipe": 8, "diarias": 9, "dias": 10, "km": 11}),
          MED_ATIV)
 
@@ -380,7 +388,8 @@ conjunto("incub_ativ", "Atividade técnica — Central de Incubação", "incubac
 def unidade(nome_aba, rot):
     return [limpar({
         "nome": texto(r[0]), "prop": texto(r[1]), "ender": texto(r[2]),
-        "mun": municipio(r[3]), "area": numero(r[6]), "arearec": numero(r[7]),
+        "mun": municipio(r[3]), "geo": texto(r[4]).replace("\n", " "),
+        "area": numero(r[6]), "arearec": numero(r[7]),
         "sexo": sexo(r[9]), "idade": numero(r[10]), "car": texto(r[11]),
         "tipo": rot,
     }) for r in linhas(nome_aba)]
@@ -427,6 +436,7 @@ conjunto("pec_adubos", "Adubos entregues às unidades", "pecuaria",
 conjunto("calcario", "Programa do calcário — beneficiários", "pecuaria",
          "Calcário",
          [limpar({"nome": texto(r[0]), "mun": municipio(r[1]), "ender": texto(r[2]),
+                  "geo": texto(r[3]).replace("\n", " "),
                   "ton": numero(r[6]), "indic": texto(r[5]),
                   "situacao": texto(r[8]), "doc": texto(r[9]).replace("Entrgue", "Entregue"),
                   "sexo": sexo(r[10]), "idade": numero(r[11]),
@@ -437,13 +447,19 @@ conjunto("calcario", "Programa do calcário — beneficiários", "pecuaria",
 ia = []
 for r in linhas("Beneficiario IA"):
     ia.append(limpar({
-        "nome": texto(r[0]), "ender": texto(r[2]), "indic": texto(r[5]),
+        # a coluna B nao tem titulo na planilha, mas e o municipio — so os
+        # lancamentos mais recentes a preenchem
+        "nome": texto(r[0]), "mun": municipio(r[1]), "ender": texto(r[2]),
+        "geo": texto(r[3]).replace("\n", " "), "indic": texto(r[5]),
         "vacas": numero(r[6]), "touros": texto(r[7]),
         "leite": numero(r[8]), "corte": numero(r[9]),
         "data": data_iso(r[10]), "ano": ano_de(r[10]),
+        "parto": data_iso(r[11]),
         "prenhez": numero(r[12]), "pctprenhez": numero(r[13]),
-        "bezerros": numero(r[14]), "machos": numero(r[16]), "femeas": numero(r[17]),
-        "sexo": sexo(r[21]), "idade": numero(r[22]),
+        "bezerros": numero(r[14]), "pctbezerros": numero(r[15]),
+        "machos": numero(r[16]), "femeas": numero(r[17]),
+        "pctmachos": numero(r[18]), "pctfemeas": numero(r[19]),
+        "sexo": sexo(r[21]), "idade": numero(r[22]), "car": texto(r[23]),
     }))
 conjunto("ia", "Inseminação artificial — beneficiários", "pecuaria",
          "Melhoramento genético", ia,
@@ -457,14 +473,17 @@ conjunto("ia", "Inseminação artificial — beneficiários", "pecuaria",
 conjunto("ensimina", "Ensimina — produtores atendidos", "pecuaria",
          "Melhoramento genético",
          [limpar({"nome": texto(r[0]), "ender": texto(r[1]), "mun": municipio(r[2]),
-                  "sexo": sexo(r[6]), "data": data_iso(r[9]), "ano": ano_de(r[9]),
+                  "geo": texto(r[3]).replace("\n", " "),
+                  "sexo": sexo(r[6]), "idade": numero(r[7]),
+                  "data": data_iso(r[9]), "ano": ano_de(r[9]),
                   "touro": texto(r[11]), "leite": numero(r[12]), "corte": sacas(r[13]),
-                  "doses": numero(r[10])})
+                  "brincos": texto(r[14]), "doses": numero(r[10])})
           for r in linhas("Ensimina + Produtores")],
          [{"campo": "doses", "rot": "Doses entregues", "un": "un", "dec": 0}])
 
 conjunto("touros", "Sêmen — touros do banco", "pecuaria", "Melhoramento genético",
-         [limpar({"nome": texto(r[0]), "reg": texto(r[1]), "raca": texto(r[5]),
+         [limpar({"nome": texto(r[0]), "reg": texto(r[1]), "nasc": data_iso(r[2]),
+                  "pai": texto(r[3]), "avo": texto(r[4]), "raca": texto(r[5]),
                   "qtd": numero(r[6]), "data": data_iso(r[7]), "ano": ano_de(r[7]),
                   "usadas": numero(r[8]), "disp": numero(r[9])})
           for r in linhas("Touro Doses")],
@@ -482,7 +501,8 @@ nitro = []
 for r in linhas("Usina de Nitrogênio"):
     nitro.append(limpar({
         "data": data_iso(r[0]), "ano": ano_de(r[0]), "nome": texto(r[1]),
-        "kg": numero(r[2]), "valor": numero(r[3]), "mun": municipio(r[5]),
+        "kg": numero(r[2]), "valor": numero(r[3]),
+        "ender": texto(r[4]), "mun": municipio(r[5]),
     }))
 conjunto("nitrogenio", "Usina de nitrogênio líquido", "pecuaria", "Usina de nitrogênio",
          nitro, [{"campo": "kg", "rot": "Nitrogênio fornecido", "un": "L", "dec": 1},
@@ -492,12 +512,14 @@ conjunto("nitrogenio", "Usina de nitrogênio líquido", "pecuaria", "Usina de ni
 
 conjunto("solar", "Energia solar nas propriedades", "pecuaria", "Energia solar",
          [limpar({"nome": texto(r[0]), "ender": texto(r[1]), "mun": municipio(r[2]),
+                  "geo": texto(r[3]).replace("\n", " "),
                   "area": numero(r[5])}) for r in linhas("Energia Solar")],
          [{"campo": "area", "rot": "Área das propriedades", "un": "ha", "dec": 1}])
 
 conjunto("pec_ativ", "Atividade técnica — pecuária", "pecuaria", "Atividade técnica",
          atividade("Atividade Tecnica",
                    {"data": 0, "nome": 1, "sexo": 2, "idade": 3, "mun": 4,
+                    "geo": 5,
                     "ativ": 6, "equipe": 7, "diarias": 8, "dias": 9, "km": 10}),
          MED_ATIV,
          "Diárias, dias e quilometragem são lançados na primeira linha de cada "

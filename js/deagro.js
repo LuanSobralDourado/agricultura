@@ -1407,12 +1407,18 @@
     'super': 'Superfosfato (kg)', kcl: 'Cloreto de potássio (kg)', micro: 'Micronutrientes (kg)',
     vacas: 'Vacas inseminadas', touros: 'Touros', touro: 'Touro', leite: 'Doses leite',
     prenhez: 'Prenhezes', pctprenhez: '% prenhez', bezerros: 'Bezerros',
-    machos: 'Machos', femeas: 'Fêmeas', doses: 'Doses', usadas: 'Doses utilizadas',
+    pctbezerros: '% bezerros', machos: 'Machos', femeas: 'Fêmeas',
+    pctmachos: '% machos', pctfemeas: '% fêmeas', parto: 'Previsão de parto',
+    brincos: 'ID dos brincos', nasc: 'Nascimento', pai: 'Pai', avo: 'Avô materno',
+    doses: 'Doses', usadas: 'Doses utilizadas',
     disp: 'Doses disponíveis', qtd: 'Doses recebidas', reg: 'Registro', raca: 'Raça',
     valor: 'Valor (R$)', curso: 'Curso', turma: 'Turma', inst: 'Instituição',
     local: 'Local', tema: 'Tema'
   };
   var DEC_CAMPO = { calc: 1, ton: 1, area: 1, arearec: 1, valor: 2, diarias: 1, kg: 1 };
+
+  /* Campos gravados em AAAA-MM-DD e exibidos em dd/mm/aaaa. */
+  var CAMPOS_DATA = { data: true, parto: true, nasc: true };
 
   /* O mesmo nome de campo quer dizer coisas diferentes conforme a base: "corte"
      é pinto na incubação e dose de sêmen na inseminação. Onde há ambiguidade,
@@ -1487,7 +1493,7 @@
         val: function (l) {
           var v = l[k];
           if (Array.isArray(v)) return v.join(', ');
-          if (k === 'data') return dataBR(v);
+          if (CAMPOS_DATA[k]) return dataBR(v);
           return v;
         }
       };
